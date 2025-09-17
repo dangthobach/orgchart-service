@@ -1,0 +1,49 @@
+package com.learnmore.infrastructure.persistence.mapper;
+
+import com.learnmore.domain.team.Team;
+import com.learnmore.infrastructure.persistence.entity.TeamEntity;
+import org.springframework.stereotype.Component;
+
+import java.util.stream.Collectors;
+
+@Component
+public class TeamMapper extends AbstractMapper<Team, TeamEntity> {
+
+    public Team entityToDomain(TeamEntity entity) {
+        if (entity == null) {
+            return null;
+        }
+
+        Team team = new Team();
+        setBaseEntityFields(team, entity);
+        team.setName(entity.getName());
+        team.setDescription(entity.getDescription());
+        team.setMembers(entity.getMembers().stream()
+                .map(userEntity -> new UserMapper().entityToDomain(userEntity))
+                .collect(Collectors.toSet()));
+        team.setTeamLead(new UserMapper().entityToDomain(entity.getTeamLead()));
+        team.setAccessibleApis(entity.getAccessibleApis().stream()
+                .map(apiEntity -> new ApiResourceMapper().entityToDomain(apiEntity))
+                .collect(Collectors.toSet()));
+        return team;
+    }
+
+    public TeamEntity domainToEntity(Team domain) {
+        if (domain == null) {
+            return null;
+        }
+
+        TeamEntity entity = new TeamEntity();
+        setBaseEntityFields(entity, domain);
+        entity.setName(domain.getName());
+        entity.setDescription(domain.getDescription());
+        entity.setMembers(domain.getMembers().stream()
+                .map(user -> new UserMapper().domainToEntity(user))
+                .collect(Collectors.toSet()));
+        entity.setTeamLead(new UserMapper().domainToEntity(domain.getTeamLead()));
+        entity.setAccessibleApis(domain.getAccessibleApis().stream()
+                .map(api -> new ApiResourceMapper().domainToEntity(api))
+                .collect(Collectors.toSet()));
+        return entity;
+    }
+} 

@@ -1,0 +1,45 @@
+package com.learnmore.infrastructure.persistence.mapper;
+
+import com.learnmore.domain.menu.Tab;
+import com.learnmore.infrastructure.persistence.entity.TabEntity;
+import org.springframework.stereotype.Component;
+
+import java.util.stream.Collectors;
+
+@Component
+public class TabMapper extends AbstractMapper<Tab, TabEntity> {
+
+    public Tab entityToDomain(TabEntity entity) {
+        if (entity == null) {
+            return null;
+        }
+
+        Tab tab = new Tab();
+        setBaseEntityFields(tab, entity);
+        tab.setName(entity.getName());
+        tab.setPath(entity.getPath());
+        tab.setOrder(entity.getOrder());
+        tab.setMenu(new MenuMapper().entityToDomain(entity.getMenu()));
+        tab.setRequiredPermissions(entity.getRequiredPermissions().stream()
+                .map(permissionEntity -> new PermissionMapper().entityToDomain(permissionEntity))
+                .collect(Collectors.toList()));
+        return tab;
+    }
+
+    public TabEntity domainToEntity(Tab domain) {
+        if (domain == null) {
+            return null;
+        }
+
+        TabEntity entity = new TabEntity();
+        setBaseEntityFields(entity, domain);
+        entity.setName(domain.getName());
+        entity.setPath(domain.getPath());
+        entity.setOrder(domain.getOrder());
+        entity.setMenu(new MenuMapper().domainToEntity(domain.getMenu()));
+        entity.setRequiredPermissions(domain.getRequiredPermissions().stream()
+                .map(permission -> new PermissionMapper().domainToEntity(permission))
+                .collect(Collectors.toList()));
+        return entity;
+    }
+} 

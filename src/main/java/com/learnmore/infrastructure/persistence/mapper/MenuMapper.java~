@@ -1,0 +1,59 @@
+package com.learnmore.infrastructure.persistence.mapper;
+
+import com.learnmore.domain.menu.Menu;
+import com.learnmore.infrastructure.persistence.entity.MenuEntity;
+import org.springframework.stereotype.Component;
+
+import java.util.stream.Collectors;
+
+@Component
+public class MenuMapper extends AbstractMapper<Menu, MenuEntity> {
+
+    public Menu entityToDomain(MenuEntity entity) {
+        if (entity == null) {
+            return null;
+        }
+
+        Menu menu = new Menu();
+        setBaseEntityFields(menu, entity);
+        menu.setName(entity.getName());
+        menu.setPath(entity.getPath());
+        menu.setIcon(entity.getIcon());
+        menu.setOrder(entity.getOrder());
+        menu.setParent(entity.getParent() != null ? entityToDomain(entity.getParent()) : null);
+        menu.setChildren(entity.getChildren().stream()
+                .map(this::entityToDomain)
+                .collect(Collectors.toSet()));
+        menu.setTabs(entity.getTabs().stream()
+                .map(tabEntity -> new TabMapper().entityToDomain(tabEntity))
+                .collect(Collectors.toSet()));
+        menu.setPermissions(entity.getPermissions().stream()
+                .map(permissionEntity -> new PermissionMapper().entityToDomain(permissionEntity))
+                .collect(Collectors.toSet()));
+        return menu;
+    }
+
+    public MenuEntity domainToEntity(Menu domain) {
+        if (domain == null) {
+            return null;
+        }
+
+        MenuEntity entity = new MenuEntity();
+        setBaseEntityFields(entity, domain);
+        entity.setName(domain.getName());
+        entity.setPath(domain.getPath());
+        entity.setIcon(domain.getIcon());
+        entity.setOrder(domain.getOrder());
+        entity.setParent(domain.getParent() != null ? domainToEntity(domain.getParent()) : null);
+        entity.setChildren(domain.getChildren().stream()
+                .map(this::domainToEntity)
+                .collect(Collectors.toSet()));
+        entity.setTabs(domain.getTabs().stream()
+                .map(tab -> new TabMapper().domainToEntity(tab))
+                .collect(Collectors.toSet()));
+        entity.setPermissions(domain.getPermissions().stream()
+                .map(permission -> new PermissionMapper().domainToEntity(permission))
+                .collect(Collectors.toSet()));
+        return entity;
+    }
+} 
