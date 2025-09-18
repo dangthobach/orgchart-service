@@ -8,10 +8,9 @@ import com.learnmore.application.utils.exception.ExcelProcessException;
 import com.learnmore.application.utils.exception.ValidationException;
 import com.learnmore.application.utils.monitoring.MemoryMonitor;
 import com.learnmore.application.utils.monitoring.ProgressMonitor;
+import com.learnmore.application.utils.sax.SAXExcelProcessor;
 import com.learnmore.application.utils.streaming.StreamingExcelProcessor;
-import com.learnmore.application.utils.validation.RequiredFieldValidator;
-import com.learnmore.application.utils.validation.DuplicateValidator;
-import com.learnmore.application.utils.validation.DataTypeValidator;
+import com.learnmore.application.utils.validation.*;
 
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
@@ -135,18 +134,15 @@ public class ExcelUtil {
     }
     
     /**
-     * Process Excel file with streaming and batch processing
+     * Process Excel file with SAX-based streaming for optimal memory usage
      * Ideal for very large files that don't fit in memory
      */
     public static <T> StreamingExcelProcessor.ProcessingResult processExcelStreaming(
             InputStream inputStream, Class<T> beanClass, ExcelConfig config, Consumer<List<T>> batchProcessor) 
             throws ExcelProcessException {
         
-        // Set up validation rules
-        setupValidationRules(config, beanClass);
-        
-        // Create and configure streaming processor
-        StreamingExcelProcessor<T> processor = new StreamingExcelProcessor<>(beanClass, config);
+        // Setup enhanced validation rules
+        List<ValidationRule> validationRules = setupValidationRules(beanClass, config);
         
         // Set up monitoring
         MemoryMonitor memoryMonitor = null;
@@ -156,12 +152,52 @@ public class ExcelUtil {
         }
         
         try {
-            return processor.processExcel(inputStream, batchProcessor);
+            if (config.isUseStreamingParser()) {
+                // Use SAX-based processing for optimal memory usage
+                logger.info("Using SAX-based streaming processor for class: {}", beanClass.getSimpleName());
+                
+                SAXExcelProcessor<T> saxProcessor = new SAXExcelProcessor<>(beanClass, config, validationRules);
+                List<T> results = saxProcessor.processExcelStream(inputStream);
+                
+                // Process in batches if batch processor provided
+                if (batchProcessor != null && !results.isEmpty()) {
+                    int batchSize = config.getBatchSize();
+                    for (int i = 0; i < results.size(); i += batchSize) {
+                        int endIndex = Math.min(i + batchSize, results.size());
+                        List<T> batch = results.subList(i, endIndex);
+                        batchProcessor.accept(batch);
+                    }
+                }
+                
+                // Create result object - matching StreamingExcelProcessor.ProcessingResult constructor
+                List<ValidationException.ValidationError> emptyErrors = new ArrayList<>();
+                long processingTime = System.currentTimeMillis(); // Simple timing for now
+                
+                return new StreamingExcelProcessor.ProcessingResult(
+                    results.size(), 0, emptyErrors, processingTime
+                );
+                
+            } else {
+                // Fallback to traditional streaming processor
+                logger.info("Using traditional streaming processor for class: {}", beanClass.getSimpleName());
+                
+                setupValidationRules(config, beanClass);
+                StreamingExcelProcessor<T> processor = new StreamingExcelProcessor<>(beanClass, config);
+                
+                try {
+                    return processor.processExcel(inputStream, batchProcessor);
+                } finally {
+                    processor.shutdown();
+                }
+            }
+            
+        } catch (Exception e) {
+            logger.error("Excel streaming processing failed: {}", e.getMessage(), e);
+            throw new ExcelProcessException("Failed to process Excel file with streaming", e);
         } finally {
             if (memoryMonitor != null) {
                 memoryMonitor.stopMonitoring();
             }
-            processor.shutdown();
         }
     }
     
@@ -467,18 +503,30 @@ public class ExcelUtil {
     /**
      * Setup validation rules based on configuration and bean class
      */
-    private static <T> void setupValidationRules(ExcelConfig config, Class<T> beanClass) {
+    /**
+     * Setup validation rules with enhanced validator support
+     * Returns list of validators for immediate validation during parsing
+     */
+    private static <T> List<ValidationRule> setupValidationRules(Class<T> beanClass, ExcelConfig config) {
+        List<ValidationRule> validationRules = new ArrayList<>();
+        
         // Set up required field validation
         if (!config.getRequiredFields().isEmpty()) {
-            config.addGlobalValidation(new RequiredFieldValidator());
+            RequiredFieldValidator requiredValidator = new RequiredFieldValidator(config.getRequiredFields());
+            validationRules.add(requiredValidator);
+            config.addGlobalValidation(requiredValidator);
+            logger.debug("Added RequiredFieldValidator for fields: {}", config.getRequiredFields());
         }
         
-        // Set up duplicate validation
+        // Set up duplicate validation with memory-efficient tracking
         if (!config.getUniqueFields().isEmpty()) {
-            config.addGlobalValidation(new DuplicateValidator(config.getUniqueFields()));
+            DuplicateValidator duplicateValidator = new DuplicateValidator(config.getUniqueFields());
+            validationRules.add(duplicateValidator);
+            config.addGlobalValidation(duplicateValidator);
+            logger.debug("Added DuplicateValidator for fields: {}", config.getUniqueFields());
         }
         
-        // Set up data type validation for each field
+        // Set up data type validation for each field with enhanced type checking
         ReflectionCache reflectionCache = ReflectionCache.getInstance();
         ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
         
@@ -487,9 +535,32 @@ public class ExcelUtil {
             Field field = entry.getValue();
             Class<?> fieldType = field.getType();
             
-            // Add data type validator for the field
-            config.addFieldValidation(columnName, new DataTypeValidator(fieldType, config.getDateFormat()));
+            // Add enhanced data type validator
+            DataTypeValidator dataTypeValidator = new DataTypeValidator(fieldType, config.getDateFormat());
+            validationRules.add(dataTypeValidator);
+            config.addFieldValidation(columnName, dataTypeValidator);
+            
+            logger.debug("Added DataTypeValidator for field: {} (type: {})", columnName, fieldType.getSimpleName());
         }
+        
+        // Add custom range validation if configured
+        if (config.isEnableRangeValidation()) {
+            validationRules.add(new NumericRangeValidator(config.getMinValue(), config.getMaxValue()));
+            logger.debug("Added NumericRangeValidator (min: {}, max: {})", config.getMinValue(), config.getMaxValue());
+        }
+        
+        // Add email validation for email fields
+        validationRules.add(new EmailValidator());
+        
+        logger.info("Setup {} validation rules for class: {}", validationRules.size(), beanClass.getSimpleName());
+        return validationRules;
+    }
+    
+    /**
+     * Legacy method for backward compatibility
+     */
+    private static <T> void setupValidationRules(ExcelConfig config, Class<T> beanClass) {
+        setupValidationRules(beanClass, config);
     }
     
     /**

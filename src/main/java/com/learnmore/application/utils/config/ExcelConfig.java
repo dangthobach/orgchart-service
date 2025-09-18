@@ -42,6 +42,14 @@ public class ExcelConfig {
     private boolean enableDataTypeCache = true;
     private boolean enableReflectionCache = true;
     
+    // Range validation
+    private boolean enableRangeValidation = false;
+    private Double minValue = null;
+    private Double maxValue = null;
+    
+    // Processing configuration
+    private int startRow = 0; // 0-based index for header row
+    
     public ExcelConfig() {
         // Default constructor
     }
@@ -160,6 +168,26 @@ public class ExcelConfig {
             return this;
         }
         
+        public Builder enableRangeValidation(boolean enabled) {
+            config.enableRangeValidation = enabled;
+            return this;
+        }
+        
+        public Builder minValue(Double minValue) {
+            config.minValue = minValue;
+            return this;
+        }
+        
+        public Builder maxValue(Double maxValue) {
+            config.maxValue = maxValue;
+            return this;
+        }
+        
+        public Builder startRow(int startRow) {
+            config.startRow = startRow;
+            return this;
+        }
+        
         public ExcelConfig build() {
             return config;
         }
@@ -248,6 +276,22 @@ public class ExcelConfig {
     
     public boolean isEnableReflectionCache() {
         return enableReflectionCache;
+    }
+    
+    public boolean isEnableRangeValidation() {
+        return enableRangeValidation;
+    }
+    
+    public Double getMinValue() {
+        return minValue;
+    }
+    
+    public Double getMaxValue() {
+        return maxValue;
+    }
+    
+    public int getStartRow() {
+        return startRow;
     }
     
     // Setters (if needed for dynamic configuration)
