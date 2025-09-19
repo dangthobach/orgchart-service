@@ -168,7 +168,7 @@ public class SAXExcelProcessor<T> {
         }
         
         @Override
-        public void cell(String cellReference, String formattedValue, XSSFSheetXMLHandler.xssfDataType dataType) {
+        public void cell(String cellReference, String formattedValue) {
             if (currentRowNum < config.getStartRow()) {
                 return;
             }
@@ -185,7 +185,7 @@ public class SAXExcelProcessor<T> {
             
             // Process data rows
             if (headerProcessed && currentInstance != null) {
-                processDataCell(colIndex, formattedValue, dataType);
+                processDataCell(colIndex, formattedValue);
             }
         }
         
@@ -221,7 +221,7 @@ public class SAXExcelProcessor<T> {
             }
         }
         
-        private void processDataCell(int colIndex, String formattedValue, XSSFSheetXMLHandler.xssfDataType dataType) {
+        private void processDataCell(int colIndex, String formattedValue) {
             // Find field by column index
             String fieldName = findFieldNameByColumnIndex(colIndex);
             if (fieldName == null) {

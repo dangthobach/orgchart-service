@@ -6,10 +6,10 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
-import javax.validation.constraints.NotBlank;
-import javax.validation.constraints.NotNull;
-import javax.validation.constraints.Pattern;
-import javax.validation.constraints.Positive;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Positive;
 
 /**
  * DTO mapping với các cột trong Excel file
@@ -21,92 +21,92 @@ import javax.validation.constraints.Positive;
 @AllArgsConstructor
 public class ExcelRowDTO {
     
-    @ExcelColumn("Kho VPBank")
+    @ExcelColumn(name = "Kho VPBank")
     @NotBlank(message = "Kho VPBank không được để trống")
     private String khoVpbank;
     
-    @ExcelColumn("Mã đơn vị")  
+    @ExcelColumn(name = "Mã đơn vị")  
     @NotBlank(message = "Mã đơn vị không được để trống")
     private String maDonVi;
     
-    @ExcelColumn("Trách nhiệm bàn giao")
+    @ExcelColumn(name = "Trách nhiệm bàn giao")
     private String trachNhiemBanGiao;
     
-    @ExcelColumn("Loại chứng từ")
+    @ExcelColumn(name = "Loại chứng từ")
     @NotBlank(message = "Loại chứng từ không được để trống")
     private String loaiChungTu;
     
-    @ExcelColumn("Ngày chứng từ")
+    @ExcelColumn(name = "Ngày chứng từ")
     @NotBlank(message = "Ngày chứng từ không được để trống")
     @Pattern(regexp = "\\d{2}/\\d{2}/\\d{4}|\\d{4}-\\d{2}-\\d{2}", 
              message = "Ngày chứng từ phải có định dạng dd/MM/yyyy hoặc yyyy-MM-dd")
     private String ngayChungTu;
     
-    @ExcelColumn("Tên tập")
+    @ExcelColumn(name = "Tên tập")
     private String tenTap;
     
-    @ExcelColumn("Số lượng tập")
+    @ExcelColumn(name = "Số lượng tập")
     @NotNull(message = "Số lượng tập không được để trống")
     @Positive(message = "Số lượng tập phải là số dương")
     private Integer soLuongTap;
     
-    @ExcelColumn("Ngày phải bàn giao")
+    @ExcelColumn(name = "Ngày phải bàn giao")
     @Pattern(regexp = "\\d{2}/\\d{2}/\\d{4}|\\d{4}-\\d{2}-\\d{2}|^$", 
              message = "Ngày phải bàn giao phải có định dạng dd/MM/yyyy hoặc yyyy-MM-dd")
     private String ngayPhaiBanGiao;
     
-    @ExcelColumn("Ngày bàn giao")
+    @ExcelColumn(name = "Ngày bàn giao")
     @Pattern(regexp = "\\d{2}/\\d{2}/\\d{4}|\\d{4}-\\d{2}-\\d{2}|^$", 
              message = "Ngày bàn giao phải có định dạng dd/MM/yyyy hoặc yyyy-MM-dd")
     private String ngayBanGiao;
     
-    @ExcelColumn("Tình trạng thất lạc")
+    @ExcelColumn(name = "Tình trạng thất lạc")
     private String tinhTrangThatLac;
     
-    @ExcelColumn("Tình trạng không hoàn trả")
+    @ExcelColumn(name = "Tình trạng không hoàn trả")
     private String tinhTrangKhongHoanTra;
     
-    @ExcelColumn("Trạng thái case PDM")
+    @ExcelColumn(name = "Trạng thái case PDM")
     private String trangThaiCasePdm;
     
-    @ExcelColumn("Ghi chú case PDM")
+    @ExcelColumn(name = "Ghi chú case PDM")
     private String ghiChuCasePdm;
     
-    @ExcelColumn("Mã thùng")
+    @ExcelColumn(name = "Mã thùng")
     @NotBlank(message = "Mã thùng không được để trống")
     private String maThung;
     
-    @ExcelColumn("Thời hạn lưu trữ")
+    @ExcelColumn(name = "Thời hạn lưu trữ")
     @NotNull(message = "Thời hạn lưu trữ không được để trống")
     @Positive(message = "Thời hạn lưu trữ phải là số dương")
     private Integer thoiHanLuuTru;
     
-    @ExcelColumn("Ngày nhập kho VPBank")
+    @ExcelColumn(name = "Ngày nhập kho VPBank")
     @Pattern(regexp = "\\d{2}/\\d{2}/\\d{4}|\\d{4}-\\d{2}-\\d{2}|^$", 
              message = "Ngày nhập kho VPBank phải có định dạng dd/MM/yyyy hoặc yyyy-MM-dd")
     private String ngayNhapKhoVpbank;
     
-    @ExcelColumn("Ngày chuyển kho Crown")
+    @ExcelColumn(name = "Ngày chuyển kho Crown")
     @Pattern(regexp = "\\d{2}/\\d{2}/\\d{4}|\\d{4}-\\d{2}-\\d{2}|^$", 
              message = "Ngày chuyển kho Crown phải có định dạng dd/MM/yyyy hoặc yyyy-MM-dd")
     private String ngayChuyenKhoCrown;
     
-    @ExcelColumn("Khu vực")
+    @ExcelColumn(name = "Khu vực")
     private String khuVuc;
     
-    @ExcelColumn("Hàng")
+    @ExcelColumn(name = "Hàng")
     private Integer hang;
     
-    @ExcelColumn("Cột")
+    @ExcelColumn(name = "Cột")
     private Integer cot;
     
-    @ExcelColumn("Tình trạng thùng")
+    @ExcelColumn(name = "Tình trạng thùng")
     private String tinhTrangThung;
     
-    @ExcelColumn("Trạng thái thùng")
+    @ExcelColumn(name = "Trạng thái thùng")
     private String trangThaiThung;
     
-    @ExcelColumn("Lưu ý")
+    @ExcelColumn(name = "Lưu ý")
     private String luuY;
     
     // Transient fields for internal processing
