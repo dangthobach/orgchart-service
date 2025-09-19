@@ -82,12 +82,32 @@ public class ExcelUtil {
     }
     
     /**
-     * Process Excel file with SAX-based streaming for optimal memory usage
-     * Ideal for very large files that don't fit in memory
+     * Process Excel file with TRUE streaming - không tích lũy kết quả trong memory
+     * Sử dụng early validation và true streaming để xử lý file rất lớn
      */
-    public static <T> StreamingExcelProcessor.ProcessingResult processExcelStreaming(
-            InputStream inputStream, Class<T> beanClass, ExcelConfig config, Consumer<List<T>> batchProcessor) 
-            throws ExcelProcessException {
+    public static <T> com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult 
+            processExcelTrueStreaming(InputStream inputStream, Class<T> beanClass, ExcelConfig config, 
+                                    Consumer<List<T>> batchProcessor) throws ExcelProcessException {
+        
+        // Early validation - kiểm tra kích thước file trước khi xử lý
+        com.learnmore.application.utils.validation.ExcelEarlyValidator.EarlyValidationResult earlyResult = 
+            com.learnmore.application.utils.validation.ExcelEarlyValidator.validateRecordCount(
+                inputStream, config.getMaxErrorsBeforeAbort(), 1);
+        
+        if (!earlyResult.isValid()) {
+            logger.warn("Excel file failed early validation: {}", earlyResult.getErrorMessage());
+            logger.info("Recommendations:\n{}", earlyResult.getRecommendation());
+            throw new ExcelProcessException("File too large: " + earlyResult.getErrorMessage());
+        }
+        
+        // Auto-suggest CSV for very large files
+        if (config.isPreferCSVForLargeData() && earlyResult.estimatedCells() > config.getCsvThreshold()) {
+            logger.warn("File has {} cells (>{} threshold). Consider CSV format for better performance.", 
+                    earlyResult.estimatedCells(), config.getCsvThreshold());
+        }
+        
+        logger.info("Early validation passed. Processing {} rows with true streaming...", 
+                earlyResult.getDataRows());
         
         // Setup enhanced validation rules
         List<ValidationRule> validationRules = setupValidationRules(beanClass, config);
@@ -100,53 +120,46 @@ public class ExcelUtil {
         }
         
         try {
-            if (config.isUseStreamingParser()) {
-                // Use SAX-based processing for optimal memory usage
-                logger.info("Using SAX-based streaming processor for class: {}", beanClass.getSimpleName());
-                
-                SAXExcelProcessor<T> saxProcessor = new SAXExcelProcessor<>(beanClass, config, validationRules);
-                List<T> results = saxProcessor.processExcelStream(inputStream);
-                
-                // Process in batches if batch processor provided
-                if (batchProcessor != null && !results.isEmpty()) {
-                    int batchSize = config.getBatchSize();
-                    for (int i = 0; i < results.size(); i += batchSize) {
-                        int endIndex = Math.min(i + batchSize, results.size());
-                        List<T> batch = results.subList(i, endIndex);
-                        batchProcessor.accept(batch);
-                    }
-                }
-                
-                // Create result object - matching StreamingExcelProcessor.ProcessingResult constructor
-                List<ValidationException.ValidationError> emptyErrors = new ArrayList<>();
-                long processingTime = System.currentTimeMillis(); // Simple timing for now
-                
-                return new StreamingExcelProcessor.ProcessingResult(
-                    results.size(), 0, emptyErrors, processingTime
-                );
-                
-            } else {
-                // Fallback to traditional streaming processor
-                logger.info("Using traditional streaming processor for class: {}", beanClass.getSimpleName());
-                
-                setupValidationRules(config, beanClass);
-                StreamingExcelProcessor<T> processor = new StreamingExcelProcessor<>(beanClass, config);
-                
-                try {
-                    return processor.processExcel(inputStream, batchProcessor);
-                } finally {
-                    processor.shutdown();
-                }
-            }
+            // Use TRUE streaming processor - không tích lũy kết quả
+            com.learnmore.application.utils.sax.TrueStreamingSAXProcessor<T> trueProcessor = 
+                new com.learnmore.application.utils.sax.TrueStreamingSAXProcessor<>(
+                    beanClass, config, validationRules, batchProcessor);
+            
+            return trueProcessor.processExcelStreamTrue(inputStream);
             
         } catch (Exception e) {
-            logger.error("Excel streaming processing failed: {}", e.getMessage(), e);
-            throw new ExcelProcessException("Failed to process Excel file with streaming", e);
+            logger.error("True streaming processing failed: {}", e.getMessage(), e);
+            throw new ExcelProcessException("Failed to process Excel file with true streaming", e);
         } finally {
             if (memoryMonitor != null) {
                 memoryMonitor.stopMonitoring();
             }
         }
+    }
+    
+    /**
+     * Legacy streaming method - DEPRECATED, use processExcelTrueStreaming instead
+     * Kept for backward compatibility
+     */
+    @Deprecated
+    public static <T> StreamingExcelProcessor.ProcessingResult processExcelStreaming(
+            InputStream inputStream, Class<T> beanClass, ExcelConfig config, Consumer<List<T>> batchProcessor) 
+            throws ExcelProcessException {
+        
+        logger.warn("Using deprecated processExcelStreaming. Consider using processExcelTrueStreaming for better performance.");
+        
+        // Delegate to true streaming method and convert result
+        com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult trueResult = 
+            processExcelTrueStreaming(inputStream, beanClass, config, batchProcessor);
+        
+        // Convert to legacy result format
+        List<ValidationException.ValidationError> emptyErrors = new ArrayList<>();
+        return new StreamingExcelProcessor.ProcessingResult(
+            (int) trueResult.getProcessedRecords(), 
+            (int) trueResult.getErrorCount(), 
+            emptyErrors, 
+            trueResult.getProcessingTimeMs()
+        );
     }
     
     /**
@@ -169,12 +182,40 @@ public class ExcelUtil {
     }
     
     /**
-     * Process multiple sheets with streaming for large files
+     * Process multiple sheets with TRUE streaming - không sử dụng WorkbookFactory
+     * Sử dụng SAX để xử lý từng sheet độc lập
      */
+    public static Map<String, com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult> 
+            processMultiSheetExcelTrueStreaming(
+                InputStream inputStream, 
+                Map<String, Class<?>> sheetClassMap,
+                Map<String, Consumer<List<?>>> sheetProcessors,
+                ExcelConfig config) throws ExcelProcessException {
+        
+        try {
+            com.learnmore.application.utils.sax.TrueStreamingMultiSheetProcessor processor = 
+                new com.learnmore.application.utils.sax.TrueStreamingMultiSheetProcessor(
+                    sheetClassMap, sheetProcessors, config);
+            
+            return processor.processTrueStreaming(inputStream);
+            
+        } catch (Exception e) {
+            logger.error("Multi-sheet true streaming failed: {}", e.getMessage(), e);
+            throw new ExcelProcessException("Failed to process multi-sheet Excel with true streaming", e);
+        }
+    }
+    
+    /**
+     * Legacy multi-sheet streaming - DEPRECATED
+     * Kept for backward compatibility but uses WorkbookFactory (memory intensive)
+     */
+    @Deprecated
     public static void processMultiSheetExcelStreaming(
             InputStream inputStream, 
             Map<String, SheetProcessorConfig> sheetProcessors, 
             ExcelConfig config) throws ExcelProcessException {
+        
+        logger.warn("Using deprecated processMultiSheetExcelStreaming. Consider using processMultiSheetExcelTrueStreaming for better performance.");
         
         MemoryMonitor memoryMonitor = null;
         
