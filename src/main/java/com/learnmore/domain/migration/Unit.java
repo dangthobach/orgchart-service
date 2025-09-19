@@ -1,6 +1,5 @@
 package com.learnmore.domain.migration;
 
-import com.learnmore.domain.common.BaseEntity;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -19,7 +18,7 @@ import jakarta.persistence.*;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Unit extends BaseEntity {
+public class Unit {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -38,10 +38,11 @@ public class MigrationController {
                description = "Upload Excel file and perform full migration process synchronously")
     public ResponseEntity<MigrationResultDTO> uploadAndMigrateExcel(
             @Parameter(description = "Excel file to upload") @RequestParam("file") MultipartFile file,
-            @Parameter(description = "User who initiated the migration") @RequestParam(defaultValue = "system") String createdBy) {
+            @Parameter(description = "User who initiated the migration") @RequestParam(defaultValue = "system") String createdBy,
+            @Parameter(description = "Maximum number of rows allowed (0 = no limit)") @RequestParam(defaultValue = "0") int maxRows) {
         
-        log.info("Received Excel upload request: filename={}, size={}, createdBy={}", 
-                file.getOriginalFilename(), file.getSize(), createdBy);
+        log.info("Received Excel upload request: filename={}, size={}, createdBy={}, maxRows={}", 
+                file.getOriginalFilename(), file.getSize(), createdBy, maxRows);
         
         // Validate file
         if (file.isEmpty()) {
@@ -65,7 +66,8 @@ public class MigrationController {
             MigrationResultDTO result = migrationOrchestrationService.performFullMigration(
                     file.getInputStream(), 
                     file.getOriginalFilename(), 
-                    createdBy
+                    createdBy,
+                    maxRows
             );
             
             if (result.isFailed()) {
@@ -99,10 +101,11 @@ public class MigrationController {
                description = "Upload Excel file and start migration process asynchronously")
     public ResponseEntity<Map<String, Object>> uploadAndMigrateExcelAsync(
             @Parameter(description = "Excel file to upload") @RequestParam("file") MultipartFile file,
-            @Parameter(description = "User who initiated the migration") @RequestParam(defaultValue = "system") String createdBy) {
+            @Parameter(description = "User who initiated the migration") @RequestParam(defaultValue = "system") String createdBy,
+            @Parameter(description = "Maximum number of rows allowed (0 = no limit)") @RequestParam(defaultValue = "0") int maxRows) {
         
-        log.info("Received async Excel upload request: filename={}, size={}, createdBy={}", 
-                file.getOriginalFilename(), file.getSize(), createdBy);
+        log.info("Received async Excel upload request: filename={}, size={}, createdBy={}, maxRows={}", 
+                file.getOriginalFilename(), file.getSize(), createdBy, maxRows);
         
         // Validate file
         if (file.isEmpty()) {
@@ -120,7 +123,8 @@ public class MigrationController {
             CompletableFuture<MigrationResultDTO> future = migrationOrchestrationService.performFullMigrationAsync(
                     file.getInputStream(), 
                     file.getOriginalFilename(), 
-                    createdBy
+                    createdBy,
+                    maxRows
             );
             
             return ResponseEntity.accepted()

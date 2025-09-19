@@ -1,12 +1,12 @@
 package com.learnmore.domain.migration;
 
-import com.learnmore.domain.common.BaseEntity;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import jakarta.persistence.*;
+import java.time.LocalDateTime;
 
 /**
  * Bảng master lưu trữ thông tin kho VPBank
@@ -19,7 +19,7 @@ import jakarta.persistence.*;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Warehouse extends BaseEntity {
+public class Warehouse {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

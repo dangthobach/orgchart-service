@@ -4,6 +4,7 @@ import com.learnmore.application.dto.migration.ExcelRowDTO;
 import com.learnmore.application.dto.migration.MigrationResultDTO;
 import com.learnmore.application.utils.ExcelUtil;
 import com.learnmore.application.utils.config.ExcelConfig;
+import com.learnmore.application.utils.validation.ExcelDimensionValidator;
 import com.learnmore.domain.migration.MigrationJob;
 import com.learnmore.domain.migration.StagingRaw;
 import com.learnmore.infrastructure.repository.MigrationJobRepository;
@@ -38,9 +39,14 @@ public class ExcelIngestService {
     
     /**
      * Bắt đầu quá trình ingest Excel file
+     * 
+     * @param inputStream Excel file input stream
+     * @param filename tên file
+     * @param createdBy người tạo
+     * @param maxRows số lượng bản ghi tối đa cho phép (0 = không giới hạn)
      */
     @Transactional
-    public MigrationResultDTO startIngestProcess(InputStream inputStream, String filename, String createdBy) {
+    public MigrationResultDTO startIngestProcess(InputStream inputStream, String filename, String createdBy, int maxRows) {
         
         // Tạo job ID unique
         String jobId = generateJobId();
@@ -61,6 +67,16 @@ public class ExcelIngestService {
         migrationJobRepository.save(migrationJob);
         
         try {
+            // Wrap InputStream với BufferedInputStream để hỗ trợ mark/reset
+            inputStream = ExcelDimensionValidator.wrapWithBuffer(inputStream);
+            
+            // Validate số lượng bản ghi nếu có giới hạn
+            int actualDataRows = 0;
+            if (maxRows > 0) {
+                actualDataRows = ExcelDimensionValidator.validateRowCount(inputStream, maxRows, 1); // startRow = 1 (skip header)
+                log.info("Dimension validation passed. Actual data rows: {}, Max allowed: {}", actualDataRows, maxRows);
+            }
+            
             // Thực hiện ingest
             IngestResult result = performIngest(inputStream, jobId);
             
@@ -302,6 +318,14 @@ public class ExcelIngestService {
             log.warn("Failed to normalize date string: {}", dateStr);
             return dateStr;
         }
+    }
+    
+    /**
+     * Overload method để maintain backward compatibility (không giới hạn số lượng bản ghi)
+     */
+    @Transactional
+    public MigrationResultDTO startIngestProcess(InputStream inputStream, String filename, String createdBy) {
+        return startIngestProcess(inputStream, filename, createdBy, 0); // 0 = không giới hạn
     }
     
     /**

@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -343,23 +344,23 @@ public class MonitoringService {
                     row -> ((Number) row[1]).longValue()
                 ));
         
-        return Map.of(
-            "jobId", job.getJobId(),
-            "status", job.getStatus(),
-            "filename", job.getFilename(),
-            "totalRows", job.getTotalRows() != null ? job.getTotalRows() : 0L,
-            "processedRows", job.getProcessedRows() != null ? job.getProcessedRows() : 0L,
-            "validRows", job.getValidRows() != null ? job.getValidRows() : 0L,
-            "errorRows", job.getErrorRows() != null ? job.getErrorRows() : 0L,
-            "insertedRows", job.getInsertedRows() != null ? job.getInsertedRows() : 0L,
-            "progressPercent", job.getProgressPercent() != null ? job.getProgressPercent() : 0.0,
-            "processingTimeMs", job.getProcessingTimeMs() != null ? job.getProcessingTimeMs() : 0L,
-            "errorBreakdown", errorBreakdown,
-            "createdAt", job.getCreatedAt(),
-            "startedAt", job.getStartedAt(),
-            "completedAt", job.getCompletedAt(),
-            "createdBy", job.getCreatedBy()
-        );
+        Map<String, Object> result = new HashMap<>();
+        result.put("jobId", job.getJobId());
+        result.put("status", job.getStatus());
+        result.put("filename", job.getFilename());
+        result.put("totalRows", job.getTotalRows() != null ? job.getTotalRows() : 0L);
+        result.put("processedRows", job.getProcessedRows() != null ? job.getProcessedRows() : 0L);
+        result.put("validRows", job.getValidRows() != null ? job.getValidRows() : 0L);
+        result.put("errorRows", job.getErrorRows() != null ? job.getErrorRows() : 0L);
+        result.put("insertedRows", job.getInsertedRows() != null ? job.getInsertedRows() : 0L);
+        result.put("progressPercent", job.getProgressPercent() != null ? job.getProgressPercent() : 0.0);
+        result.put("processingTimeMs", job.getProcessingTimeMs() != null ? job.getProcessingTimeMs() : 0L);
+        result.put("errorBreakdown", errorBreakdown);
+        result.put("createdAt", job.getCreatedAt());
+        result.put("startedAt", job.getStartedAt());
+        result.put("completedAt", job.getCompletedAt());
+        result.put("createdBy", job.getCreatedBy());
+        return result;
     }
     
     /**

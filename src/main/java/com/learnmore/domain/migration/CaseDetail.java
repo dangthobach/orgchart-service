@@ -1,6 +1,6 @@
 package com.learnmore.domain.migration;
 
-import com.learnmore.domain.common.BaseEntity;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,7 +23,7 @@ import java.time.LocalDate;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class CaseDetail extends BaseEntity {
+public class CaseDetail {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

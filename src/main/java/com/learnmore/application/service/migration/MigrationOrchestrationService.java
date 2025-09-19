@@ -25,16 +25,16 @@ public class MigrationOrchestrationService {
     private final MonitoringService monitoringService;
     
     /**
-     * Thực hiện toàn bộ quá trình migration (đồng bộ)
+     * Thực hiện toàn bộ quá trình migration (đồng bộ) với giới hạn số lượng bản ghi
      */
-    public MigrationResultDTO performFullMigration(InputStream inputStream, String filename, String createdBy) {
+    public MigrationResultDTO performFullMigration(InputStream inputStream, String filename, String createdBy, int maxRows) {
         
         log.info("Starting full migration process for file: {}", filename);
         
         try {
             // Phase 1: Ingest
             log.info("=== Phase 1: Excel Ingest ===");
-            MigrationResultDTO ingestResult = excelIngestService.startIngestProcess(inputStream, filename, createdBy);
+            MigrationResultDTO ingestResult = excelIngestService.startIngestProcess(inputStream, filename, createdBy, maxRows);
             
             if (ingestResult.isFailed()) {
                 log.error("Migration failed at ingest phase: {}", ingestResult.getErrorMessage());
@@ -108,16 +108,23 @@ public class MigrationOrchestrationService {
     }
     
     /**
-     * Thực hiện migration bất đồng bộ
+     * Thực hiện toàn bộ quá trình migration (đồng bộ) - backward compatibility
+     */
+    public MigrationResultDTO performFullMigration(InputStream inputStream, String filename, String createdBy) {
+        return performFullMigration(inputStream, filename, createdBy, 0); // 0 = không giới hạn
+    }
+    
+    /**
+     * Thực hiện migration bất đồng bộ với giới hạn số lượng bản ghi
      */
     @Async("migrationExecutor")
     public CompletableFuture<MigrationResultDTO> performFullMigrationAsync(
-            InputStream inputStream, String filename, String createdBy) {
+            InputStream inputStream, String filename, String createdBy, int maxRows) {
         
-        log.info("Starting async full migration process for file: {}", filename);
+        log.info("Starting async full migration process for file: {}, maxRows: {}", filename, maxRows);
         
         try {
-            MigrationResultDTO result = performFullMigration(inputStream, filename, createdBy);
+            MigrationResultDTO result = performFullMigration(inputStream, filename, createdBy, maxRows);
             return CompletableFuture.completedFuture(result);
             
         } catch (Exception e) {
@@ -132,6 +139,15 @@ public class MigrationOrchestrationService {
                     
             return CompletableFuture.completedFuture(errorResult);
         }
+    }
+    
+    /**
+     * Thực hiện migration bất đồng bộ - backward compatibility
+     */
+    @Async("migrationExecutor")
+    public CompletableFuture<MigrationResultDTO> performFullMigrationAsync(
+            InputStream inputStream, String filename, String createdBy) {
+        return performFullMigrationAsync(inputStream, filename, createdBy, 0); // 0 = không giới hạn
     }
     
     /**

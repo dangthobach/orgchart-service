@@ -1,6 +1,6 @@
 package com.learnmore.domain.migration;
 
-import com.learnmore.domain.common.BaseEntity;
+
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -21,7 +21,7 @@ import java.time.LocalDate;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Box extends BaseEntity {
+public class Box {
     
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
