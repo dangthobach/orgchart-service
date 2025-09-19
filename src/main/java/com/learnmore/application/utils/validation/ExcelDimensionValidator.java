@@ -43,21 +43,21 @@ public class ExcelDimensionValidator {
         try {
             // Mark the stream so we can reset it later
             inputStream.mark(Integer.MAX_VALUE);
-            
-            // Read dimension from Excel
-            DimensionInfo dimensionInfo = readDimension(inputStream);
-            
+            DimensionInfo dimensionInfo = null;
+            try {
+                // Read dimension from Excel
+                dimensionInfo = readDimension(inputStream);
+            } catch (Exception ex) {
+                throw new ExcelProcessException("Không thể đọc dimension từ Excel file: " + ex.getMessage(), ex);
+            }
             // Reset stream to beginning
             inputStream.reset();
-            
             // Calculate actual data rows (excluding header rows)
             int totalRows = dimensionInfo.getLastRow() - dimensionInfo.getFirstRow() + 1;
             int dataRows = Math.max(0, totalRows - startRow);
-            
             log.info("Excel dimension: {}:{}, Total rows: {}, Data rows: {}, Max allowed: {}", 
                     dimensionInfo.getFirstCellRef(), dimensionInfo.getLastCellRef(), 
                     totalRows, dataRows, maxRows);
-            
             // Validate against max rows
             if (dataRows > maxRows) {
                 throw new ExcelProcessException(String.format(
@@ -65,13 +65,10 @@ public class ExcelDimensionValidator {
                     "Vui lòng chia nhỏ file hoặc tăng giới hạn xử lý.", 
                     dataRows, maxRows));
             }
-            
             return dataRows;
-            
+        } catch (ExcelProcessException e) {
+            throw e;
         } catch (Exception e) {
-            if (e instanceof ExcelProcessException) {
-                throw e;
-            }
             throw new ExcelProcessException("Không thể đọc dimension từ Excel file: " + e.getMessage(), e);
         }
     }

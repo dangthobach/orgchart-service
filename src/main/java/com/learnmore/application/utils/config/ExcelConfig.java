@@ -42,6 +42,19 @@ public class ExcelConfig {
     private boolean enableDataTypeCache = true;
     private boolean enableReflectionCache = true;
     
+    // Excel Processing Strategy Configuration
+    private long cellCountThresholdForSXSSF = 2_000_000L; // 2 triệu ô -> chuyển SXSSF
+    private int sxssfRowAccessWindowSize = 500; // Số hàng giữ trong RAM cho SXSSF
+    private long maxCellsForXSSF = 1_500_000L; // 1.5 triệu ô tối đa cho XSSF
+    private boolean forceStreamingMode = false; // Bắt buộc dùng streaming
+    private boolean preferCSVForLargeData = true; // Ưu tiên CSV cho dữ liệu rất lớn
+    private long csvThreshold = 5_000_000L; // >5 triệu ô -> khuyến nghị CSV
+    
+    // Format constraints
+    private boolean allowXLSFormat = false; // Mặc định không cho phép .xls (giới hạn 65k hàng)
+    private int maxRowsForXLS = 65_535; // Giới hạn .xls
+    private int maxColsForXLS = 256; // Giới hạn cột .xls
+    
     // Range validation
     private boolean enableRangeValidation = false;
     private Double minValue = null;
@@ -165,6 +178,52 @@ public class ExcelConfig {
         
         public Builder enableReflectionCache(boolean enabled) {
             config.enableReflectionCache = enabled;
+            return this;
+        }
+        
+        // Excel Strategy Configuration
+        public Builder cellCountThresholdForSXSSF(long threshold) {
+            config.cellCountThresholdForSXSSF = threshold;
+            return this;
+        }
+        
+        public Builder sxssfRowAccessWindowSize(int windowSize) {
+            config.sxssfRowAccessWindowSize = windowSize;
+            return this;
+        }
+        
+        public Builder maxCellsForXSSF(long maxCells) {
+            config.maxCellsForXSSF = maxCells;
+            return this;
+        }
+        
+        public Builder forceStreamingMode(boolean force) {
+            config.forceStreamingMode = force;
+            return this;
+        }
+        
+        public Builder preferCSVForLargeData(boolean prefer) {
+            config.preferCSVForLargeData = prefer;
+            return this;
+        }
+        
+        public Builder csvThreshold(long threshold) {
+            config.csvThreshold = threshold;
+            return this;
+        }
+        
+        public Builder allowXLSFormat(boolean allow) {
+            config.allowXLSFormat = allow;
+            return this;
+        }
+        
+        public Builder maxRowsForXLS(int maxRows) {
+            config.maxRowsForXLS = maxRows;
+            return this;
+        }
+        
+        public Builder maxColsForXLS(int maxCols) {
+            config.maxColsForXLS = maxCols;
             return this;
         }
         
@@ -292,6 +351,43 @@ public class ExcelConfig {
     
     public int getStartRow() {
         return startRow;
+    }
+    
+    // Excel Strategy Getters
+    public long getCellCountThresholdForSXSSF() {
+        return cellCountThresholdForSXSSF;
+    }
+    
+    public int getSxssfRowAccessWindowSize() {
+        return sxssfRowAccessWindowSize;
+    }
+    
+    public long getMaxCellsForXSSF() {
+        return maxCellsForXSSF;
+    }
+    
+    public boolean isForceStreamingMode() {
+        return forceStreamingMode;
+    }
+    
+    public boolean isPreferCSVForLargeData() {
+        return preferCSVForLargeData;
+    }
+    
+    public long getCsvThreshold() {
+        return csvThreshold;
+    }
+    
+    public boolean isAllowXLSFormat() {
+        return allowXLSFormat;
+    }
+    
+    public int getMaxRowsForXLS() {
+        return maxRowsForXLS;
+    }
+    
+    public int getMaxColsForXLS() {
+        return maxColsForXLS;
     }
     
     // Setters (if needed for dynamic configuration)

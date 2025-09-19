@@ -56,18 +56,11 @@ public class UserController {
     @GetMapping("/export/excel")
     public ResponseEntity<byte[]> exportUsersToExcel() {
         List<User> users = userService.getAllUsers();
-        
-        try {
-            byte[] excelBytes = ExcelUtil.writeToExcelBytes(users, 0, 0);
-            
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
-            headers.setContentDispositionFormData("attachment", "users.xlsx");
-            
-            return new ResponseEntity<>(excelBytes, headers, HttpStatus.OK);
-        } catch (IOException e) {
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
-        }
+        byte[] excelBytes = ExcelUtil.writeToExcelBytes(users, 0, 0);
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_OCTET_STREAM);
+        headers.setContentDispositionFormData("attachment", "users.xlsx");
+        return new ResponseEntity<>(excelBytes, headers, HttpStatus.OK);
     }
 
     @PostMapping("/{userId}/roles")

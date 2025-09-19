@@ -64,7 +64,7 @@ public class SAXExcelProcessor<T> {
      * Process Excel stream using SAX parser
      */
     public List<T> processExcelStream(InputStream inputStream) throws Exception {
-        List<T> result = new ArrayList<>();
+    List<T> result = new ArrayList<>();
         
         try (OPCPackage opcPackage = OPCPackage.open(inputStream)) {
             XSSFReader xssfReader = new XSSFReader(opcPackage);
@@ -74,7 +74,7 @@ public class SAXExcelProcessor<T> {
             
             // Create custom content handler
             SAXExcelContentHandler contentHandler = new SAXExcelContentHandler(
-                beanClass, fieldMapping, config, validationRules, typeConverter, result
+                beanClass, fieldMapping, config, validationRules, typeConverter, (List<Object>) (List<?>) result
             );
             
             // Setup SAX parser
@@ -116,27 +116,22 @@ public class SAXExcelProcessor<T> {
     /**
      * Custom content handler for SAX-based Excel processing
      */
-    private class SAXExcelContentHandler implements XSSFSheetXMLHandler.SheetContentsHandler {
-        
-        private final Class<?> beanClass;
-        private final Map<String, Field> fieldMapping;
-        private final ExcelConfig config;
-        private final List<ValidationRule> validationRules;
-        private final TypeConverter typeConverter;
-        private final List<T> result;
-        
-        private final AtomicLong processedRows = new AtomicLong(0);
-        private final List<String> validationErrors = new ArrayList<>();
-        
-        private Map<String, Integer> headerMapping = new HashMap<>();
-        private Object currentInstance;
-        private int currentRowNum = 0;
-        private boolean headerProcessed = false;
-        
-        @SuppressWarnings("unchecked")
+    public static class SAXExcelContentHandler implements XSSFSheetXMLHandler.SheetContentsHandler {
+        public final Class<?> beanClass;
+        public final Map<String, Field> fieldMapping;
+        public final ExcelConfig config;
+        public final List<ValidationRule> validationRules;
+        public final TypeConverter typeConverter;
+        public final List<Object> result;
+        public final AtomicLong processedRows = new AtomicLong(0);
+        public final List<String> validationErrors = new ArrayList<>();
+        public Map<String, Integer> headerMapping = new HashMap<>();
+        public Object currentInstance;
+        public int currentRowNum = 0;
+        public boolean headerProcessed = false;
         public SAXExcelContentHandler(Class<?> beanClass, Map<String, Field> fieldMapping,
                                      ExcelConfig config, List<ValidationRule> validationRules,
-                                     TypeConverter typeConverter, List<T> result) {
+                                     TypeConverter typeConverter, List<Object> result) {
             this.beanClass = beanClass;
             this.fieldMapping = fieldMapping;
             this.config = config;
@@ -207,7 +202,7 @@ public class SAXExcelProcessor<T> {
                     runValidations(currentInstance, rowNum);
                     
                     // Add to result if valid
-                    result.add((T) currentInstance);
+                    result.add(currentInstance);
                     processedRows.incrementAndGet();
                     
                     if (processedRows.get() % 1000 == 0) {
