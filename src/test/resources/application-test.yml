@@ -1,0 +1,47 @@
+spring:
+  application:
+    name: orgchart-service-test
+  
+  # Test database configuration (H2 in-memory for performance testing)
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  # JPA configuration for test
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+        dialect: org.hibernate.dialect.H2Dialect
+        order_inserts: true
+        order_updates: true
+        jdbc:
+          batch_size: 1000
+          batch_versioned_data: true
+
+# Logging configuration for performance tests  
+logging:
+  level:
+    com.learnmore: INFO
+    com.learnmore.application.performance: DEBUG
+    com.learnmore.application.utils: DEBUG
+    org.springframework: WARN
+    org.hibernate: WARN
+    org.apache.poi: WARN
+    
+  pattern:
+    console: "%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+# Performance test specific configuration
+performance:
+  excel:
+    temp-directory: target/performance-tests
+    cleanup-after-test: true
+    enable-memory-monitoring: true
+    batch-size: 5000
+    max-memory-threshold: 2048
