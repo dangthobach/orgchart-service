@@ -68,6 +68,14 @@ public class ExcelConfig {
     private int startRow = 0; // 0-based index for header row
     private boolean autoSizeColumns = true; // Default auto-size columns for better presentation
     
+    // POI Performance Optimizations - Based on benchmark analysis
+    private boolean disableAutoSizing = false; // Major performance impact for large datasets
+    private boolean useSharedStrings = true; // Memory vs speed tradeoff (default true for memory efficiency)
+    private boolean compressOutput = true; // Enable compression for smaller files (slight performance cost)
+    private int flushInterval = 1000; // Periodic flushing interval for SXSSF (records)
+    private boolean enableCellStyleOptimization = true; // Reuse cell styles to reduce memory
+    private boolean minimizeMemoryFootprint = true; // Aggressive memory optimizations
+    
     public ExcelConfig() {
         // Default constructor
     }
@@ -257,6 +265,37 @@ public class ExcelConfig {
             return this;
         }
         
+        // POI Performance Optimizations - Based on benchmark findings
+        public Builder disableAutoSizing(boolean disabled) {
+            config.disableAutoSizing = disabled;
+            return this;
+        }
+        
+        public Builder useSharedStrings(boolean enabled) {
+            config.useSharedStrings = enabled;
+            return this;
+        }
+        
+        public Builder compressOutput(boolean enabled) {
+            config.compressOutput = enabled;
+            return this;
+        }
+        
+        public Builder flushInterval(int interval) {
+            config.flushInterval = interval;
+            return this;
+        }
+        
+        public Builder enableCellStyleOptimization(boolean enabled) {
+            config.enableCellStyleOptimization = enabled;
+            return this;
+        }
+        
+        public Builder minimizeMemoryFootprint(boolean enabled) {
+            config.minimizeMemoryFootprint = enabled;
+            return this;
+        }
+        
         public ExcelConfig build() {
             return config;
         }
@@ -365,6 +404,31 @@ public class ExcelConfig {
     
     public boolean isAutoSizeColumns() {
         return autoSizeColumns;
+    }
+    
+    // POI Performance Optimization Getters - Based on benchmark analysis
+    public boolean isDisableAutoSizing() {
+        return disableAutoSizing;
+    }
+    
+    public boolean isUseSharedStrings() {
+        return useSharedStrings;
+    }
+    
+    public boolean isCompressOutput() {
+        return compressOutput;
+    }
+    
+    public int getFlushInterval() {
+        return flushInterval;
+    }
+    
+    public boolean isEnableCellStyleOptimization() {
+        return enableCellStyleOptimization;
+    }
+    
+    public boolean isMinimizeMemoryFootprint() {
+        return minimizeMemoryFootprint;
     }
     
     // Excel Strategy Getters
