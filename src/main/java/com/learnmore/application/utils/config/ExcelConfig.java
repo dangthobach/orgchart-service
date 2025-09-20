@@ -66,6 +66,7 @@ public class ExcelConfig {
     
     // Processing configuration
     private int startRow = 0; // 0-based index for header row
+    private boolean autoSizeColumns = true; // Default auto-size columns for better presentation
     
     public ExcelConfig() {
         // Default constructor
@@ -251,6 +252,11 @@ public class ExcelConfig {
             return this;
         }
         
+        public Builder autoSizeColumns(boolean autoSize) {
+            config.autoSizeColumns = autoSize;
+            return this;
+        }
+        
         public ExcelConfig build() {
             return config;
         }
@@ -357,6 +363,10 @@ public class ExcelConfig {
         return startRow;
     }
     
+    public boolean isAutoSizeColumns() {
+        return autoSizeColumns;
+    }
+    
     // Excel Strategy Getters
     public long getCellCountThresholdForSXSSF() {
         return cellCountThresholdForSXSSF;
@@ -441,6 +451,10 @@ public class ExcelConfig {
     
     public void setProgressReportInterval(long progressReportInterval) {
         this.progressReportInterval = progressReportInterval;
+    }
+    
+    public void setAutoSizeColumns(boolean autoSizeColumns) {
+        this.autoSizeColumns = autoSizeColumns;
     }
     
     public void setUseStreamingParser(boolean useStreamingParser) {
