@@ -52,7 +52,7 @@ public class User {
     private LocalDate birthDate;
     
     @ExcelColumn(name = "Salary")
-    @Column(name = "salary", precision = 10, scale = 2)
+    @Column(name = "salary")
     private Double salary;
     
     @ExcelColumn(name = "Department")
