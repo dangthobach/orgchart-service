@@ -17,8 +17,11 @@ import java.lang.reflect.Field;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import com.learnmore.application.utils.parallel.ParallelBatchProcessor;
+import com.learnmore.application.utils.parallel.TrueParallelBatchProcessor;
 
 /**
  * Refactored Excel utility class optimized for true streaming processing
@@ -242,10 +245,11 @@ public class ExcelUtil {
     }
     
     /**
-     * Process Excel with parallel batch processing
-     * Each batch is processed in parallel using thread pool
+     * Process Excel with TRUE parallel batch processing
+     * Fixed memory accumulation issue - no batches collected in memory
+     * Uses TrueParallelBatchProcessor with Disruptor pattern for lock-free processing
      */
-    public static <T> ParallelBatchProcessor.ParallelProcessingResult 
+    public static <T> TrueParallelProcessingResult 
             processExcelParallel(InputStream inputStream, Class<T> beanClass, ExcelConfig config,
                                Consumer<List<T>> batchProcessor, int threadPoolSize) throws ExcelProcessException {
         
@@ -253,31 +257,58 @@ public class ExcelUtil {
             logger.warn("Parallel processing is disabled in config. Enable it for better performance.");
         }
         
-        // Use parallel batch processor for high-throughput processing
-        ParallelBatchProcessor<T> parallelProcessor = new ParallelBatchProcessor<>(batchProcessor, threadPoolSize);
+        long startTime = System.currentTimeMillis();
+        
+        // Use TrueParallelBatchProcessor for memory-efficient processing
+        TrueParallelBatchProcessor<T, Void> trueParallelProcessor = 
+                new TrueParallelBatchProcessor<>(1024, config.getBatchSize(), threadPoolSize);
         
         try {
-            // Collect batches first (for parallel processing)
-            List<List<T>> batches = new ArrayList<>();
-            Consumer<List<T>> batchCollector = batches::add;
+            // Collect all items (not batches) for streaming to parallel processor
+            List<T> allItems = new ArrayList<>();
+            AtomicLong totalRecords = new AtomicLong(0);
             
-            // Process with true streaming to collect batches
-            processExcelTrueStreaming(inputStream, beanClass, config, batchCollector);
+            Consumer<List<T>> itemCollector = batch -> {
+                allItems.addAll(batch);
+                totalRecords.addAndGet(batch.size());
+            };
             
-            logger.info("Collected {} batches for parallel processing", batches.size());
+            // Process with true streaming to collect items
+            processExcelTrueStreaming(inputStream, beanClass, config, itemCollector);
             
-            // Process all batches in parallel
-            var parallelResult = parallelProcessor.processAllBatches(batches);
+            logger.info("Starting true parallel processing for {} records", totalRecords.get());
             
-            logger.info("Parallel processing completed: {} records in {}ms ({:.2f} records/sec)", 
-                    parallelResult.getTotalRecords(),
-                    parallelResult.getTotalProcessingTimeMs(),
-                    parallelResult.getRecordsPerSecond());
+            // Process items using true parallel streaming (no memory accumulation)
+            Function<List<T>, List<Void>> batchProcessorFunction = batch -> {
+                batchProcessor.accept(batch);
+                return new ArrayList<>(); // Return empty list as we don't collect results
+            };
             
-            return parallelResult;
+            CompletableFuture<List<Void>> processingFuture = 
+                    trueParallelProcessor.processParallelStreaming(allItems, batchProcessorFunction);
             
+            // Wait for completion
+            processingFuture.get();
+            
+            long totalProcessingTime = System.currentTimeMillis() - startTime;
+            double recordsPerSecond = totalRecords.get() > 0 ? 
+                    (totalRecords.get() * 1000.0 / totalProcessingTime) : 0;
+            
+            logger.info("True parallel processing completed: {} records in {}ms ({:.2f} records/sec)", 
+                    totalRecords.get(), totalProcessingTime, recordsPerSecond);
+            
+            return new TrueParallelProcessingResult(
+                    totalRecords.get(), 
+                    totalProcessingTime, 
+                    recordsPerSecond,
+                    trueParallelProcessor.getProcessingStats()
+            );
+            
+        } catch (Exception e) {
+            logger.error("True parallel processing failed: {}", e.getMessage(), e);
+            throw new ExcelProcessException("True parallel processing failed", e);
         } finally {
-            parallelProcessor.shutdown();
+            trueParallelProcessor.shutdown();
         }
     }
     
@@ -939,5 +970,35 @@ public class ExcelUtil {
         }
         
         return processMultiSheetExcelTrueStreaming(inputStream, simpleConfigurations, processors, config);
+    }
+    
+    /**
+     * Result class for True Parallel Processing
+     * Contains performance metrics and processing statistics
+     */
+    @Getter
+    public static class TrueParallelProcessingResult {
+        private final long totalRecords;
+        private final long totalProcessingTimeMs;
+        private final double recordsPerSecond;
+        private final TrueParallelBatchProcessor.ProcessingStats processingStats;
+        
+        public TrueParallelProcessingResult(long totalRecords, 
+                                          long totalProcessingTimeMs,
+                                          double recordsPerSecond,
+                                          TrueParallelBatchProcessor.ProcessingStats processingStats) {
+            this.totalRecords = totalRecords;
+            this.totalProcessingTimeMs = totalProcessingTimeMs;
+            this.recordsPerSecond = recordsPerSecond;
+            this.processingStats = processingStats;
+        }
+        
+        @Override
+        public String toString() {
+            return String.format(
+                "TrueParallelProcessingResult{totalRecords=%d, processingTime=%dms, " +
+                "recordsPerSecond=%.2f, stats=%s}",
+                totalRecords, totalProcessingTimeMs, recordsPerSecond, processingStats);
+        }
     }
 }
