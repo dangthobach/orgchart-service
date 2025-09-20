@@ -5,15 +5,10 @@ import com.learnmore.application.utils.cache.ReflectionCache;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.converter.TypeConverter;
 import com.learnmore.application.utils.exception.ExcelProcessException;
-import com.learnmore.application.utils.exception.ValidationException;
 import com.learnmore.application.utils.monitoring.MemoryMonitor;
-import com.learnmore.application.utils.monitoring.ProgressMonitor;
-import com.learnmore.application.utils.sax.SAXExcelProcessor;
-import com.learnmore.application.utils.streaming.StreamingExcelProcessor;
 import com.learnmore.application.utils.validation.*;
 
 import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,66 +19,65 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.function.Consumer;
 
 /**
- * Enhanced Excel utility class optimized for high-performance processing
+ * Refactored Excel utility class optimized for true streaming processing
  * Supports 1M+ records with comprehensive validation, monitoring, and error handling
+ * 
  * Key Features:
- * - Streaming processing for large datasets
+ * - True streaming processing for large datasets (no memory accumulation)
  * - Comprehensive validation framework
  * - Memory monitoring and optimization
- * - Progress tracking and reporting
  * - Advanced type conversion support
- * - Reflection caching for performance
  * - Proper resource management
+ * - Production-ready performance
  */
 public class ExcelUtil {
     
     private static final Logger logger = LoggerFactory.getLogger(ExcelUtil.class);
     
-    // Default configuration with optimized thresholds
+    // Default configuration optimized for true streaming
     private static final ExcelConfig DEFAULT_CONFIG = ExcelConfig.builder()
             .batchSize(1000)
-            .memoryThreshold(500)
-            .parallelProcessing(true)
-            .enableProgressTracking(true)
+            .memoryThresholdMB(512)
             .enableMemoryMonitoring(true)
-            .cellCountThresholdForSXSSF(2_000_000L)
-            .maxCellsForXSSF(1_500_000L)
+            .cellCountThresholdForSXSSF(1_500_000L)
+            .maxCellsForXSSF(1_000_000L)
             .sxssfRowAccessWindowSize(500)
             .preferCSVForLargeData(true)
-            .csvThreshold(5_000_000L)
-            .allowXLSFormat(false)
+            .csvThreshold(3_000_000L)
+            .maxErrorsBeforeAbort(500)
             .build();
     
+    // ============================================================================
+    // MAIN PROCESSING METHODS - TRUE STREAMING ONLY
+    // ============================================================================
+    
     /**
-     * Process Excel file to POJO list with default configuration
-     * Legacy method for backward compatibility
+     * Main entry point for Excel processing - uses true streaming
+     * Backward compatible method that delegates to processExcelTrueStreaming
      */
-    public static <T> List<T> sheetToPOJO(InputStream inputStream, Class<T> beanClass) throws ExcelProcessException {
-        return processExcelToList(inputStream, beanClass, DEFAULT_CONFIG);
+    public static <T> List<T> processExcel(InputStream inputStream, Class<T> beanClass) throws ExcelProcessException {
+        return processExcel(inputStream, beanClass, DEFAULT_CONFIG);
     }
     
     /**
-     * Process Excel file to POJO list with custom configuration
-     * High-performance method optimized for large datasets
+     * Process Excel file with configuration - delegates to true streaming
+     * Collects results for backward compatibility
      */
-    public static <T> List<T> processExcelToList(InputStream inputStream, Class<T> beanClass, ExcelConfig config)
+    public static <T> List<T> processExcel(InputStream inputStream, Class<T> beanClass, ExcelConfig config) 
             throws ExcelProcessException {
+        
         List<T> results = new ArrayList<>();
-        try {
-            // Use SAX-based streaming for large files
-            List<ValidationRule> validationRules = setupValidationRules(beanClass, config);
-            SAXExcelProcessor<T> saxProcessor =
-                new SAXExcelProcessor<>(beanClass, config, validationRules);
-            results = saxProcessor.processExcelStream(inputStream);
-            return results;
-        } catch (Exception e) {
-            throw new ExcelProcessException("Failed to process Excel file with streaming", e);
-        }
+        Consumer<List<T>> collector = results::addAll;
+        
+        var processingResult = processExcelTrueStreaming(inputStream, beanClass, config, collector);
+        
+        logger.info("Processed {} records with true streaming", processingResult.getProcessedRecords());
+        return results;
     }
     
     /**
-     * Process Excel file with TRUE streaming - không tích lũy kết quả trong memory
-     * Sử dụng early validation và true streaming để xử lý file rất lớn
+     * Process Excel file with TRUE streaming - Main method for large datasets
+     * Uses early validation và true streaming để xử lý file rất lớn
      */
     public static <T> com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult 
             processExcelTrueStreaming(InputStream inputStream, Class<T> beanClass, ExcelConfig config, 
@@ -120,12 +114,47 @@ public class ExcelUtil {
         }
         
         try {
+            long startTime = System.currentTimeMillis();
+            long startMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+            
             // Use TRUE streaming processor - không tích lũy kết quả
             com.learnmore.application.utils.sax.TrueStreamingSAXProcessor<T> trueProcessor = 
                 new com.learnmore.application.utils.sax.TrueStreamingSAXProcessor<>(
                     beanClass, config, validationRules, batchProcessor);
             
-            return trueProcessor.processExcelStreamTrue(inputStream);
+            var result = trueProcessor.processExcelStreamTrue(inputStream);
+            
+            // Performance logging
+            long endTime = System.currentTimeMillis();
+            long endMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
+            long processingTime = endTime - startTime;
+            long memoryDelta = endMemory - startMemory;
+            
+            logger.info("TRUE STREAMING PERFORMANCE REPORT:");
+            logger.info("  Records processed: {}", result.getProcessedRecords());
+            logger.info("  Processing time: {}ms", processingTime);
+            logger.info("  Records/second: {:.2f}", result.getRecordsPerSecond());
+            logger.info("  Memory delta: {} MB", memoryDelta / 1024 / 1024);
+            logger.info("  Error count: {}", result.getErrorCount());
+            
+            if (result.getErrorCount() > 0) {
+                double errorRate = (result.getErrorCount() * 100.0) / result.getProcessedRecords();
+                logger.warn("  Error rate: {:.2f}%", errorRate);
+                
+                if (errorRate > 5.0) {
+                    logger.warn("HIGH ERROR RATE detected! Consider reviewing data quality or validation rules.");
+                }
+            }
+            
+            // Performance recommendations
+            if (result.getRecordsPerSecond() < 1000) {
+                logger.warn("LOW PERFORMANCE detected. Consider:");
+                logger.warn("  - Increasing batch size (current: {})", config.getBatchSize());
+                logger.warn("  - Reducing validation complexity");
+                logger.warn("  - Checking database/processing bottlenecks");
+            }
+            
+            return result;
             
         } catch (Exception e) {
             logger.error("True streaming processing failed: {}", e.getMessage(), e);
@@ -138,52 +167,8 @@ public class ExcelUtil {
     }
     
     /**
-     * Legacy streaming method - DEPRECATED, use processExcelTrueStreaming instead
-     * Kept for backward compatibility
-     */
-    @Deprecated
-    public static <T> StreamingExcelProcessor.ProcessingResult processExcelStreaming(
-            InputStream inputStream, Class<T> beanClass, ExcelConfig config, Consumer<List<T>> batchProcessor) 
-            throws ExcelProcessException {
-        
-        logger.warn("Using deprecated processExcelStreaming. Consider using processExcelTrueStreaming for better performance.");
-        
-        // Delegate to true streaming method and convert result
-        com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult trueResult = 
-            processExcelTrueStreaming(inputStream, beanClass, config, batchProcessor);
-        
-        // Convert to legacy result format
-        List<ValidationException.ValidationError> emptyErrors = new ArrayList<>();
-        return new StreamingExcelProcessor.ProcessingResult(
-            (int) trueResult.getProcessedRecords(), 
-            (int) trueResult.getErrorCount(), 
-            emptyErrors, 
-            trueResult.getProcessingTimeMs()
-        );
-    }
-    
-    /**
-     * Process multiple sheets in Excel file with different POJO types
-     * Each sheet corresponds to a different entity type
-     */
-    public static Map<String, MultiSheetResult> processMultiSheetExcel(
-            InputStream inputStream, Map<String, Class<?>> sheetClassMap, ExcelConfig config)
-            throws ExcelProcessException {
-        Map<String, MultiSheetResult> results = new HashMap<>();
-        // Use streaming/SAX for multi-sheet processing
-        try {
-            com.learnmore.application.utils.sax.SAXMultiSheetProcessor saxMultiSheetProcessor =
-                new com.learnmore.application.utils.sax.SAXMultiSheetProcessor(sheetClassMap, config);
-            results = saxMultiSheetProcessor.process(inputStream);
-        } catch (Exception e) {
-            throw new ExcelProcessException("Failed to process multi-sheet Excel file with streaming", e);
-        }
-        return results;
-    }
-    
-    /**
-     * Process multiple sheets with TRUE streaming - không sử dụng WorkbookFactory
-     * Sử dụng SAX để xử lý từng sheet độc lập
+     * Process multiple sheets with TRUE streaming - SAX-based processing
+     * Each sheet is processed independently with its own batch processor
      */
     public static Map<String, com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult> 
             processMultiSheetExcelTrueStreaming(
@@ -193,6 +178,8 @@ public class ExcelUtil {
                 ExcelConfig config) throws ExcelProcessException {
         
         try {
+            logger.info("Starting multi-sheet true streaming processing for {} sheets", sheetClassMap.size());
+            
             com.learnmore.application.utils.sax.TrueStreamingMultiSheetProcessor processor = 
                 new com.learnmore.application.utils.sax.TrueStreamingMultiSheetProcessor(
                     sheetClassMap, sheetProcessors, config);
@@ -205,64 +192,19 @@ public class ExcelUtil {
         }
     }
     
+    // ============================================================================
+    // EXCEL WRITING METHODS - OPTIMIZED FOR PERFORMANCE
+    // ============================================================================
+    
     /**
-     * Legacy multi-sheet streaming - DEPRECATED
-     * Kept for backward compatibility but uses WorkbookFactory (memory intensive)
+     * Write data to Excel file with default configuration
      */
-    @Deprecated
-    public static void processMultiSheetExcelStreaming(
-            InputStream inputStream, 
-            Map<String, SheetProcessorConfig> sheetProcessors, 
-            ExcelConfig config) throws ExcelProcessException {
-        
-        logger.warn("Using deprecated processMultiSheetExcelStreaming. Consider using processMultiSheetExcelTrueStreaming for better performance.");
-        
-        MemoryMonitor memoryMonitor = null;
-        
-        try (Workbook workbook = WorkbookFactory.create(inputStream)) {
-            
-            if (config.isEnableMemoryMonitoring()) {
-                memoryMonitor = new MemoryMonitor(config.getMemoryThresholdMB());
-                memoryMonitor.startMonitoring();
-            }
-            
-            // Process each sheet with its specific processor
-            for (Map.Entry<String, SheetProcessorConfig> entry : sheetProcessors.entrySet()) {
-                String sheetName = entry.getKey();
-                SheetProcessorConfig processorConfig = entry.getValue();
-                
-                try {
-                    Sheet sheet = workbook.getSheet(sheetName);
-                    if (sheet == null) {
-                        logger.warn("Sheet '{}' not found in Excel file", sheetName);
-                        continue;
-                    }
-                    
-                    // Process sheet with streaming
-                    processSheetStreaming(sheet, processorConfig, config);
-                    
-                    logger.info("Completed streaming processing for sheet '{}'", sheetName);
-                    
-                } catch (Exception e) {
-                    logger.error("Error streaming sheet '{}': {}", sheetName, e.getMessage());
-                    
-                    if (config.isFailOnFirstError()) {
-                        throw new ExcelProcessException("Failed to stream process sheet: " + sheetName, e);
-                    }
-                }
-            }
-            
-        } catch (IOException e) {
-            throw new ExcelProcessException("Failed to read Excel file for streaming", e);
-        } finally {
-            if (memoryMonitor != null) {
-                memoryMonitor.stopMonitoring();
-            }
-        }
+    public static <T> void writeToExcel(String fileName, List<T> data) throws ExcelProcessException {
+        writeToExcel(fileName, data, 0, 0, DEFAULT_CONFIG);
     }
-
+    
     /**
-     * Write data to Excel file with enhanced performance and validation
+     * Write data to Excel file with custom start positions
      */
     public static <T> void writeToExcel(String fileName, List<T> data, Integer rowStart, Integer columnStart) 
             throws ExcelProcessException {
@@ -270,7 +212,7 @@ public class ExcelUtil {
     }
     
     /**
-     * Write data to Excel file with custom configuration using intelligent strategy selection
+     * Write data to Excel file with full configuration - intelligent strategy selection
      */
     public static <T> void writeToExcel(String fileName, List<T> data, Integer rowStart, Integer columnStart, ExcelConfig config) 
             throws ExcelProcessException {
@@ -290,18 +232,13 @@ public class ExcelUtil {
         com.learnmore.application.utils.strategy.ExcelWriteStrategy.WriteMode strategy = 
             com.learnmore.application.utils.strategy.ExcelWriteStrategy.determineWriteStrategy(dataSize, columnCount, config);
         
-        // Log strategy decision and recommendations
+        // Log strategy decision
         String recommendations = com.learnmore.application.utils.strategy.ExcelWriteStrategy.getOptimizationRecommendation(dataSize, columnCount, config);
         logger.info("Excel write strategy selected: {}\nRecommendations:\n{}", strategy, recommendations);
         
         // Set up monitoring
-        ProgressMonitor progressMonitor = null;
         MemoryMonitor memoryMonitor = null;
         try {
-            if (config.isEnableProgressTracking()) {
-                progressMonitor = new ProgressMonitor(config.getProgressReportInterval());
-                progressMonitor.start(data.size());
-            }
             if (config.isEnableMemoryMonitoring()) {
                 memoryMonitor = new MemoryMonitor(config.getMemoryThresholdMB());
                 memoryMonitor.startMonitoring();
@@ -333,13 +270,7 @@ public class ExcelUtil {
                     writeToExcelStreamingSXSSF(fileName, data, rowStart, columnStart, config);
             }
             
-            if (progressMonitor != null) {
-                progressMonitor.complete();
-            }
         } catch (Exception e) {
-            if (progressMonitor != null) {
-                progressMonitor.abort("Writing failed: " + e.getMessage());
-            }
             throw new ExcelProcessException("Failed to write Excel file: " + fileName, e);
         } finally {
             if (memoryMonitor != null) {
@@ -349,203 +280,10 @@ public class ExcelUtil {
     }
     
     /**
-     * Write to Excel using streaming for large datasets
-     */
-    private static <T> void writeToExcelStreaming(String fileName, List<T> data, ExcelConfig config) 
-            throws IOException {
-        
-        @SuppressWarnings("unchecked")
-        Class<T> dataClass = (Class<T>) data.get(0).getClass();
-        StreamingExcelProcessor<T> processor = new StreamingExcelProcessor<>(dataClass, config);
-        
-        try (FileOutputStream outputStream = new FileOutputStream(fileName)) {
-            processor.writeToExcelStream(data, outputStream);
-        } finally {
-            processor.shutdown();
-        }
-    }
-    
-    /**
-     * Calculate number of columns for a POJO class
-     */
-    private static int calculateColumnCount(Class<?> beanClass) {
-        ReflectionCache reflectionCache = ReflectionCache.getInstance();
-        ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
-        return excelFields.size();
-    }
-    
-    /**
-     * Traditional XSSF writing for small datasets (≤1.5M cells)
-     */
-    private static <T> void writeToExcelXSSF(String fileName, List<T> data, Integer rowStart, Integer columnStart, ExcelConfig config)
-            throws Exception {
-        ReflectionCache reflectionCache = ReflectionCache.getInstance();
-        @SuppressWarnings("unchecked")
-        Class<T> beanClass = (Class<T>) data.get(0).getClass();
-        
-        try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
-             java.io.FileOutputStream fos = new java.io.FileOutputStream(fileName)) {
-            
-            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet();
-            ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
-            List<String> columnNames = new ArrayList<>(excelFields.keySet());
-            
-            // Header
-            org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(rowStart);
-            org.apache.poi.ss.usermodel.CellStyle headerStyle = createHeaderStyle(workbook);
-            for (int i = 0; i < columnNames.size(); i++) {
-                org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(columnStart + i);
-                cell.setCellValue(columnNames.get(i));
-                cell.setCellStyle(headerStyle);
-            }
-            
-            // Data rows
-            int currentRow = rowStart + 1;
-            for (T item : data) {
-                org.apache.poi.ss.usermodel.Row row = sheet.createRow(currentRow++);
-                for (int i = 0; i < columnNames.size(); i++) {
-                    org.apache.poi.ss.usermodel.Cell cell = row.createCell(columnStart + i);
-                    String columnName = columnNames.get(i);
-                    Field field = excelFields.get(columnName);
-                    if (field != null) {
-                        try {
-                            field.setAccessible(true);
-                            Object value = field.get(item);
-                            setCellValue(cell, value);
-                        } catch (IllegalAccessException e) {
-                            logger.warn("Failed to access field '{}': {}", field.getName(), e.getMessage());
-                        }
-                    }
-                }
-            }
-            workbook.write(fos);
-        }
-    }
-    
-    /**
-     * SXSSF streaming writing with configurable window size
-     */
-    private static <T> void writeToExcelStreamingSXSSF(String fileName, List<T> data, Integer rowStart, Integer columnStart, ExcelConfig config)
-            throws Exception {
-        writeToExcelStreamingSXSSF(fileName, data, rowStart, columnStart, config, config.getSxssfRowAccessWindowSize());
-    }
-    
-    /**
-     * SXSSF streaming writing with custom window size
-     */
-    private static <T> void writeToExcelStreamingSXSSF(String fileName, List<T> data, Integer rowStart, Integer columnStart, ExcelConfig config, int windowSize)
-            throws Exception {
-        ReflectionCache reflectionCache = ReflectionCache.getInstance();
-        @SuppressWarnings("unchecked")
-        Class<T> beanClass = (Class<T>) data.get(0).getClass();
-        
-        try (org.apache.poi.xssf.streaming.SXSSFWorkbook workbook = new org.apache.poi.xssf.streaming.SXSSFWorkbook(windowSize);
-             java.io.FileOutputStream fos = new java.io.FileOutputStream(fileName)) {
-            org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet();
-            ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
-            List<String> columnNames = new ArrayList<>(excelFields.keySet());
-            // Header
-            org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(rowStart);
-            org.apache.poi.ss.usermodel.CellStyle headerStyle = createHeaderStyle(workbook);
-            for (int i = 0; i < columnNames.size(); i++) {
-                org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(columnStart + i);
-                cell.setCellValue(columnNames.get(i));
-                cell.setCellStyle(headerStyle);
-            }
-            // Data rows
-            int currentRow = rowStart + 1;
-            for (T item : data) {
-                org.apache.poi.ss.usermodel.Row row = sheet.createRow(currentRow++);
-                for (int i = 0; i < columnNames.size(); i++) {
-                    org.apache.poi.ss.usermodel.Cell cell = row.createCell(columnStart + i);
-                    String columnName = columnNames.get(i);
-                    Field field = excelFields.get(columnName);
-                    if (field != null) {
-                        try {
-                            field.setAccessible(true);
-                            Object value = field.get(item);
-                            setCellValue(cell, value);
-                        } catch (IllegalAccessException e) {
-                            logger.warn("Failed to access field '{}': {}", field.getName(), e.getMessage());
-                        }
-                    }
-                }
-            }
-            workbook.write(fos);
-            workbook.dispose(); // free temp files
-        }
-    }
-    
-    /**
-     * Multi-sheet writing for very large datasets (>500k rows)
-     */
-    private static <T> void writeToExcelMultiSheet(String fileName, List<T> data, Integer rowStart, Integer columnStart, ExcelConfig config)
-            throws Exception {
-        ReflectionCache reflectionCache = ReflectionCache.getInstance();
-        @SuppressWarnings("unchecked")
-        Class<T> beanClass = (Class<T>) data.get(0).getClass();
-        
-        int sheetCount = com.learnmore.application.utils.strategy.ExcelWriteStrategy.calculateOptimalSheetCount(data.size(), config);
-        int rowsPerSheet = (int) Math.ceil((double) data.size() / sheetCount);
-        int windowSize = com.learnmore.application.utils.strategy.ExcelWriteStrategy.calculateOptimalWindowSize(data.size(), calculateColumnCount(beanClass), config);
-        
-        try (org.apache.poi.xssf.streaming.SXSSFWorkbook workbook = new org.apache.poi.xssf.streaming.SXSSFWorkbook(windowSize);
-             java.io.FileOutputStream fos = new java.io.FileOutputStream(fileName)) {
-            
-            ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
-            List<String> columnNames = new ArrayList<>(excelFields.keySet());
-            
-            for (int sheetIndex = 0; sheetIndex < sheetCount; sheetIndex++) {
-                org.apache.poi.ss.usermodel.Sheet sheet = workbook.createSheet("Sheet" + (sheetIndex + 1));
-                
-                // Calculate data range for this sheet
-                int startIdx = sheetIndex * rowsPerSheet;
-                int endIdx = Math.min(startIdx + rowsPerSheet, data.size());
-                List<T> sheetData = data.subList(startIdx, endIdx);
-                
-                // Write header
-                org.apache.poi.ss.usermodel.Row headerRow = sheet.createRow(rowStart);
-                org.apache.poi.ss.usermodel.CellStyle headerStyle = createHeaderStyle(workbook);
-                for (int i = 0; i < columnNames.size(); i++) {
-                    org.apache.poi.ss.usermodel.Cell cell = headerRow.createCell(columnStart + i);
-                    cell.setCellValue(columnNames.get(i));
-                    cell.setCellStyle(headerStyle);
-                }
-                
-                // Write data rows
-                int currentRow = rowStart + 1;
-                for (T item : sheetData) {
-                    org.apache.poi.ss.usermodel.Row row = sheet.createRow(currentRow++);
-                    for (int i = 0; i < columnNames.size(); i++) {
-                        org.apache.poi.ss.usermodel.Cell cell = row.createCell(columnStart + i);
-                        String columnName = columnNames.get(i);
-                        Field field = excelFields.get(columnName);
-                        if (field != null) {
-                            try {
-                                field.setAccessible(true);
-                                Object value = field.get(item);
-                                setCellValue(cell, value);
-                            } catch (IllegalAccessException e) {
-                                logger.warn("Failed to access field '{}': {}", field.getName(), e.getMessage());
-                            }
-                        }
-                    }
-                }
-                
-                logger.info("Completed sheet {} ({}-{} of {} total records)", 
-                        sheetIndex + 1, startIdx + 1, endIdx, data.size());
-            }
-            
-            workbook.write(fos);
-            workbook.dispose();
-        }
-    }
-    
-    /**
      * Write data to Excel bytes with enhanced performance
      */
-    public static <T> byte[] writeToExcelBytes(List<T> data, Integer rowStart, Integer columnStart) throws ExcelProcessException {
-        return writeToExcelBytes(data, rowStart, columnStart, DEFAULT_CONFIG);
+    public static <T> byte[] writeToExcelBytes(List<T> data) throws ExcelProcessException {
+        return writeToExcelBytes(data, 0, 0, DEFAULT_CONFIG);
     }
     
     /**
@@ -559,28 +297,25 @@ public class ExcelUtil {
         }
         
         try (ByteArrayOutputStream outputStream = new ByteArrayOutputStream()) {
-            @SuppressWarnings("unchecked")
-            Class<T> dataClass = (Class<T>) data.get(0).getClass();
-            StreamingExcelProcessor<T> processor = new StreamingExcelProcessor<>(dataClass, config);
+            // Use SXSSF for streaming even for bytes
+            int dataSize = data.size();
+            int columnCount = calculateColumnCount(data.get(0).getClass());
+            int windowSize = com.learnmore.application.utils.strategy.ExcelWriteStrategy.calculateOptimalWindowSize(dataSize, columnCount, config);
             
-            try {
-                processor.writeToExcelStream(data, outputStream);
-                return outputStream.toByteArray();
-            } finally {
-                processor.shutdown();
-            }
+            writeToExcelStreamingSXSSFBytes(data, rowStart, columnStart, config, windowSize, outputStream);
+            return outputStream.toByteArray();
             
         } catch (IOException e) {
             throw new ExcelProcessException("Failed to generate Excel bytes", e);
         }
     }
     
-    /**
-     * Setup validation rules based on configuration and bean class
-     */
+    // ============================================================================
+    // PRIVATE HELPER METHODS - STREAMLINED FOR TRUE STREAMING
+    // ============================================================================
+    
     /**
      * Setup validation rules with enhanced validator support
-     * Returns list of validators for immediate validation during parsing
      */
     private static <T> List<ValidationRule> setupValidationRules(Class<T> beanClass, ExcelConfig config) {
         List<ValidationRule> validationRules = new ArrayList<>();
@@ -601,7 +336,7 @@ public class ExcelUtil {
             logger.debug("Added DuplicateValidator for fields: {}", config.getUniqueFields());
         }
         
-        // Set up data type validation for each field with enhanced type checking
+        // Set up data type validation for each field
         ReflectionCache reflectionCache = ReflectionCache.getInstance();
         ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
         
@@ -618,13 +353,13 @@ public class ExcelUtil {
             logger.debug("Added DataTypeValidator for field: {} (type: {})", columnName, fieldType.getSimpleName());
         }
         
-        // Add custom range validation if configured
+        // Add numeric range validation if configured
         if (config.isEnableRangeValidation()) {
             validationRules.add(new NumericRangeValidator(config.getMinValue(), config.getMaxValue()));
             logger.debug("Added NumericRangeValidator (min: {}, max: {})", config.getMinValue(), config.getMaxValue());
         }
         
-        // Add email validation for email fields
+        // Add email validation
         validationRules.add(new EmailValidator());
         
         logger.info("Setup {} validation rules for class: {}", validationRules.size(), beanClass.getSimpleName());
@@ -632,10 +367,226 @@ public class ExcelUtil {
     }
     
     /**
-     * Legacy method for backward compatibility
+     * Calculate number of columns for a POJO class
      */
-    private static <T> void setupValidationRules(ExcelConfig config, Class<T> beanClass) {
-        setupValidationRules(beanClass, config);
+    private static int calculateColumnCount(Class<?> beanClass) {
+        ReflectionCache reflectionCache = ReflectionCache.getInstance();
+        ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
+        return excelFields.size();
+    }
+    
+    /**
+     * Traditional XSSF writing for small datasets (≤1M cells)
+     */
+    private static <T> void writeToExcelXSSF(String fileName, List<T> data, Integer rowStart, Integer columnStart, ExcelConfig config)
+            throws Exception {
+        ReflectionCache reflectionCache = ReflectionCache.getInstance();
+        @SuppressWarnings("unchecked")
+        Class<T> beanClass = (Class<T>) data.get(0).getClass();
+        
+        try (org.apache.poi.xssf.usermodel.XSSFWorkbook workbook = new org.apache.poi.xssf.usermodel.XSSFWorkbook();
+             FileOutputStream fos = new FileOutputStream(fileName)) {
+            
+            Sheet sheet = workbook.createSheet();
+            ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
+            List<String> columnNames = new ArrayList<>(excelFields.keySet());
+            
+            // Header
+            Row headerRow = sheet.createRow(rowStart);
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            for (int i = 0; i < columnNames.size(); i++) {
+                Cell cell = headerRow.createCell(columnStart + i);
+                cell.setCellValue(columnNames.get(i));
+                cell.setCellStyle(headerStyle);
+            }
+            
+            // Data rows
+            int currentRow = rowStart + 1;
+            for (T item : data) {
+                Row row = sheet.createRow(currentRow++);
+                writeRowData(row, item, columnNames, excelFields, columnStart);
+            }
+            workbook.write(fos);
+        }
+    }
+    
+    /**
+     * SXSSF streaming writing with configurable window size
+     */
+    private static <T> void writeToExcelStreamingSXSSF(String fileName, List<T> data, Integer rowStart, Integer columnStart, ExcelConfig config, int windowSize)
+            throws Exception {
+        ReflectionCache reflectionCache = ReflectionCache.getInstance();
+        @SuppressWarnings("unchecked")
+        Class<T> beanClass = (Class<T>) data.get(0).getClass();
+        
+        try (org.apache.poi.xssf.streaming.SXSSFWorkbook workbook = new org.apache.poi.xssf.streaming.SXSSFWorkbook(windowSize);
+             FileOutputStream fos = new FileOutputStream(fileName)) {
+            
+            Sheet sheet = workbook.createSheet();
+            ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
+            List<String> columnNames = new ArrayList<>(excelFields.keySet());
+            
+            // Header
+            Row headerRow = sheet.createRow(rowStart);
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            for (int i = 0; i < columnNames.size(); i++) {
+                Cell cell = headerRow.createCell(columnStart + i);
+                cell.setCellValue(columnNames.get(i));
+                cell.setCellStyle(headerStyle);
+            }
+            
+            // Data rows
+            int currentRow = rowStart + 1;
+            for (T item : data) {
+                Row row = sheet.createRow(currentRow++);
+                writeRowData(row, item, columnNames, excelFields, columnStart);
+            }
+            workbook.write(fos);
+            workbook.dispose(); // free temp files
+        }
+    }
+    
+    /**
+     * Write to SXSSF bytes output stream
+     */
+    private static <T> void writeToExcelStreamingSXSSFBytes(List<T> data, Integer rowStart, Integer columnStart, 
+            ExcelConfig config, int windowSize, ByteArrayOutputStream outputStream) throws Exception {
+        ReflectionCache reflectionCache = ReflectionCache.getInstance();
+        @SuppressWarnings("unchecked")
+        Class<T> beanClass = (Class<T>) data.get(0).getClass();
+        
+        try (org.apache.poi.xssf.streaming.SXSSFWorkbook workbook = new org.apache.poi.xssf.streaming.SXSSFWorkbook(windowSize)) {
+            Sheet sheet = workbook.createSheet();
+            ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
+            List<String> columnNames = new ArrayList<>(excelFields.keySet());
+            
+            // Header
+            Row headerRow = sheet.createRow(rowStart);
+            CellStyle headerStyle = createHeaderStyle(workbook);
+            for (int i = 0; i < columnNames.size(); i++) {
+                Cell cell = headerRow.createCell(columnStart + i);
+                cell.setCellValue(columnNames.get(i));
+                cell.setCellStyle(headerStyle);
+            }
+            
+            // Data rows
+            int currentRow = rowStart + 1;
+            for (T item : data) {
+                Row row = sheet.createRow(currentRow++);
+                writeRowData(row, item, columnNames, excelFields, columnStart);
+            }
+            workbook.write(outputStream);
+            workbook.dispose();
+        }
+    }
+    
+    /**
+     * Multi-sheet writing for very large datasets (>500k rows)
+     */
+    private static <T> void writeToExcelMultiSheet(String fileName, List<T> data, Integer rowStart, Integer columnStart, ExcelConfig config)
+            throws Exception {
+        ReflectionCache reflectionCache = ReflectionCache.getInstance();
+        @SuppressWarnings("unchecked")
+        Class<T> beanClass = (Class<T>) data.get(0).getClass();
+        
+        int sheetCount = com.learnmore.application.utils.strategy.ExcelWriteStrategy.calculateOptimalSheetCount(data.size(), config);
+        int rowsPerSheet = (int) Math.ceil((double) data.size() / sheetCount);
+        int windowSize = com.learnmore.application.utils.strategy.ExcelWriteStrategy.calculateOptimalWindowSize(data.size(), calculateColumnCount(beanClass), config);
+        
+        try (org.apache.poi.xssf.streaming.SXSSFWorkbook workbook = new org.apache.poi.xssf.streaming.SXSSFWorkbook(windowSize);
+             FileOutputStream fos = new FileOutputStream(fileName)) {
+            
+            ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
+            List<String> columnNames = new ArrayList<>(excelFields.keySet());
+            
+            for (int sheetIndex = 0; sheetIndex < sheetCount; sheetIndex++) {
+                Sheet sheet = workbook.createSheet("Sheet" + (sheetIndex + 1));
+                
+                // Calculate data range for this sheet
+                int startIdx = sheetIndex * rowsPerSheet;
+                int endIdx = Math.min(startIdx + rowsPerSheet, data.size());
+                List<T> sheetData = data.subList(startIdx, endIdx);
+                
+                // Write header
+                Row headerRow = sheet.createRow(rowStart);
+                CellStyle headerStyle = createHeaderStyle(workbook);
+                for (int i = 0; i < columnNames.size(); i++) {
+                    Cell cell = headerRow.createCell(columnStart + i);
+                    cell.setCellValue(columnNames.get(i));
+                    cell.setCellStyle(headerStyle);
+                }
+                
+                // Write data rows
+                int currentRow = rowStart + 1;
+                for (T item : sheetData) {
+                    Row row = sheet.createRow(currentRow++);
+                    writeRowData(row, item, columnNames, excelFields, columnStart);
+                }
+                
+                logger.info("Completed sheet {} ({}-{} of {} total records)", 
+                        sheetIndex + 1, startIdx + 1, endIdx, data.size());
+            }
+            
+            workbook.write(fos);
+            workbook.dispose();
+        }
+    }
+    
+    /**
+     * Write data to CSV file using streaming approach
+     */
+    private static <T> void writeToCSVStreaming(String fileName, List<T> data, ExcelConfig config) throws Exception {
+        ReflectionCache reflectionCache = ReflectionCache.getInstance();
+        @SuppressWarnings("unchecked")
+        Class<T> beanClass = (Class<T>) data.get(0).getClass();
+        ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
+        List<String> columnNames = new ArrayList<>(excelFields.keySet());
+        
+        try (BufferedWriter writer = new BufferedWriter(
+                new OutputStreamWriter(new FileOutputStream(fileName), java.nio.charset.StandardCharsets.UTF_8))) {
+            
+            // Write header
+            writer.write(String.join(config.getDelimiter(), columnNames));
+            writer.newLine();
+            
+            // Write data rows
+            for (T item : data) {
+                List<String> row = new ArrayList<>();
+                for (String columnName : columnNames) {
+                    Field field = excelFields.get(columnName);
+                    if (field != null) {
+                        field.setAccessible(true);
+                        Object value = field.get(item);
+                        row.add(value != null ? value.toString() : "");
+                    } else {
+                        row.add("");
+                    }
+                }
+                writer.write(String.join(config.getDelimiter(), row));
+                writer.newLine();
+            }
+        }
+    }
+    
+    /**
+     * Write row data to Excel row - consolidated method
+     */
+    private static <T> void writeRowData(Row row, T item, List<String> columnNames, 
+            ConcurrentMap<String, Field> excelFields, Integer columnStart) {
+        for (int i = 0; i < columnNames.size(); i++) {
+            Cell cell = row.createCell(columnStart + i);
+            String columnName = columnNames.get(i);
+            Field field = excelFields.get(columnName);
+            if (field != null) {
+                try {
+                    field.setAccessible(true);
+                    Object value = field.get(item);
+                    setCellValue(cell, value);
+                } catch (IllegalAccessException e) {
+                    logger.warn("Failed to access field '{}': {}", field.getName(), e.getMessage());
+                }
+            }
+        }
     }
     
     /**
@@ -685,6 +636,10 @@ public class ExcelUtil {
         }
     }
     
+    // ============================================================================
+    // UTILITY METHODS - PERFORMANCE AND MONITORING
+    // ============================================================================
+    
     /**
      * Get cache and conversion statistics for monitoring
      */
@@ -698,273 +653,6 @@ public class ExcelUtil {
     }
     
     /**
-     * Process a single sheet with specific POJO type
-     */
-    private static <T> MultiSheetResult processSheet(Sheet sheet, Class<T> beanClass, ExcelConfig config) 
-            throws ExcelProcessException {
-        
-        ReflectionCache reflectionCache = ReflectionCache.getInstance();
-        TypeConverter typeConverter = TypeConverter.getInstance();
-        
-        List<T> results = new ArrayList<>();
-        List<String> errors = new ArrayList<>();
-        
-        // Get Excel column fields
-        ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
-        
-        // Setup validation
-        setupValidationRules(config, beanClass);
-        
-        // Get header row to map columns
-        Row headerRow = sheet.getRow(sheet.getFirstRowNum());
-        if (headerRow == null) {
-            return new MultiSheetResult(results, List.of("Header row not found"), 0, null);
-        }
-        
-        Map<Integer, String> columnMapping = createColumnMapping(headerRow, excelFields.keySet());
-        
-        // Process data rows
-        int processedRows = 0;
-        for (int rowIndex = sheet.getFirstRowNum() + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
-            Row row = sheet.getRow(rowIndex);
-            if (row == null) continue;
-            
-            try {
-                T instance = beanClass.getDeclaredConstructor().newInstance();
-                boolean hasData = false;
-                
-                // Process each column
-                for (Map.Entry<Integer, String> mapping : columnMapping.entrySet()) {
-                    int cellIndex = mapping.getKey();
-                    String columnName = mapping.getValue();
-                    
-                    Cell cell = row.getCell(cellIndex);
-                    Field field = excelFields.get(columnName);
-                    
-                    if (field != null) {
-                        Object value = getCellValue(cell, field.getType(), typeConverter);
-                        if (value != null) {
-                            hasData = true;
-                            field.setAccessible(true);
-                            field.set(instance, value);
-                        }
-                    }
-                }
-                
-                if (hasData) {
-                    // Validate instance
-                    validateInstance(config, rowIndex, errors);
-                    results.add(instance);
-                }
-                
-                processedRows++;
-                
-            } catch (Exception e) {
-                String error = String.format("Row %d: %s", rowIndex + 1, e.getMessage());
-                errors.add(error);
-                logger.warn("Error processing row {}: {}", rowIndex + 1, e.getMessage());
-            }
-        }
-        
-        return new MultiSheetResult(results, errors, processedRows, null);
-    }
-    
-    /**
-     * Process sheet with streaming approach
-     */
-    @SuppressWarnings("unchecked")
-    private static <T> void processSheetStreaming(Sheet sheet, SheetProcessorConfig processorConfig, ExcelConfig config) 
-            throws Exception {
-        
-        Class<T> beanClass = (Class<T>) processorConfig.getBeanClass();
-        Consumer<List<T>> batchProcessor = (Consumer<List<T>>) processorConfig.getBatchProcessor();
-        
-        ReflectionCache reflectionCache = ReflectionCache.getInstance();
-        TypeConverter typeConverter = TypeConverter.getInstance();
-        
-        // Get Excel column fields
-        ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
-        
-        // Setup validation
-        setupValidationRules(config, beanClass);
-        
-        // Get header row
-        Row headerRow = sheet.getRow(sheet.getFirstRowNum());
-        if (headerRow == null) {
-            throw new ExcelProcessException("Header row not found in sheet");
-        }
-        
-        Map<Integer, String> columnMapping = createColumnMapping(headerRow, excelFields.keySet());
-        
-        // Process in batches
-        List<T> batch = new ArrayList<>();
-        int batchSize = config.getBatchSize();
-        
-        for (int rowIndex = sheet.getFirstRowNum() + 1; rowIndex <= sheet.getLastRowNum(); rowIndex++) {
-            Row row = sheet.getRow(rowIndex);
-            if (row == null) continue;
-            
-            try {
-                T instance = beanClass.getDeclaredConstructor().newInstance();
-                boolean hasData = false;
-                
-                // Process each column
-                for (Map.Entry<Integer, String> mapping : columnMapping.entrySet()) {
-                    int cellIndex = mapping.getKey();
-                    String columnName = mapping.getValue();
-                    
-                    Cell cell = row.getCell(cellIndex);
-                    Field field = excelFields.get(columnName);
-                    
-                    if (field != null) {
-                        Object value = getCellValue(cell, field.getType(), typeConverter);
-                        if (value != null) {
-                            hasData = true;
-                            field.setAccessible(true);
-                            field.set(instance, value);
-                        }
-                    }
-                }
-                
-                if (hasData) {
-                    batch.add(instance);
-                }
-                
-                // Process batch when it reaches the batch size
-                if (batch.size() >= batchSize) {
-                    batchProcessor.accept(new ArrayList<>(batch));
-                    batch.clear();
-                }
-                
-            } catch (Exception e) {
-                logger.warn("Error processing row {}: {}", rowIndex + 1, e.getMessage());
-            }
-        }
-        
-        // Process remaining items in batch
-        if (!batch.isEmpty()) {
-            batchProcessor.accept(batch);
-        }
-    }
-    
-    /**
-     * Create column mapping from header row
-     */
-    private static Map<Integer, String> createColumnMapping(Row headerRow, Set<String> availableColumns) {
-        Map<Integer, String> mapping = new HashMap<>();
-        
-        for (Cell cell : headerRow) {
-            if (cell != null) {
-                String headerValue = cell.getStringCellValue();
-                if (headerValue != null && availableColumns.contains(headerValue.trim())) {
-                    mapping.put(cell.getColumnIndex(), headerValue.trim());
-                }
-            }
-        }
-        
-        return mapping;
-    }
-    
-    /**
-     * Get cell value with proper type conversion
-     */
-    private static Object getCellValue(Cell cell, Class<?> fieldType, TypeConverter typeConverter) {
-        if (cell == null) return null;
-        
-        try {
-            return getCellValueByType(cell, cell.getCellType(), fieldType, typeConverter);
-        } catch (Exception e) {
-            logger.warn("Failed to convert cell value: {}", e.getMessage());
-            return null;
-        }
-    }
-    
-    /**
-     * Get cell value by cell type with formula evaluation support
-     */
-    private static Object getCellValueByType(Cell cell, CellType cellType, Class<?> fieldType, TypeConverter typeConverter) {
-        switch (cellType) {
-            case STRING:
-                String stringValue = cell.getStringCellValue();
-                return typeConverter.convert(stringValue, fieldType);
-                
-            case NUMERIC:
-                // Check if it's a date by looking at cell style
-                if (org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell)) {
-                    return cell.getDateCellValue();
-                } else {
-                    double numericValue = cell.getNumericCellValue();
-                    return typeConverter.convert(String.valueOf(numericValue), fieldType);
-                }
-                
-            case BOOLEAN:
-                boolean boolValue = cell.getBooleanCellValue();
-                return typeConverter.convert(String.valueOf(boolValue), fieldType);
-                
-            case FORMULA:
-                return evaluateFormulaCell(cell, fieldType, typeConverter);
-                
-            case BLANK:
-                return null;
-                
-            case ERROR:
-                logger.warn("Cell contains error value: {}", cell.getErrorCellValue());
-                return null;
-                
-            default:
-                return null;
-        }
-    }
-    
-    /**
-     * Evaluate formula cell and convert result
-     */
-    private static Object evaluateFormulaCell(Cell cell, Class<?> fieldType, TypeConverter typeConverter) {
-        try {
-            FormulaEvaluator evaluator = cell.getSheet().getWorkbook().getCreationHelper().createFormulaEvaluator();
-            CellValue cellValue = evaluator.evaluate(cell);
-            
-            switch (cellValue.getCellType()) {
-                case STRING:
-                    return typeConverter.convert(cellValue.getStringValue(), fieldType);
-                    
-                case NUMERIC:
-                    if (org.apache.poi.ss.usermodel.DateUtil.isCellDateFormatted(cell)) {
-                        return cell.getDateCellValue();
-                    } else {
-                        return typeConverter.convert(String.valueOf(cellValue.getNumberValue()), fieldType);
-                    }
-                    
-                case BOOLEAN:
-                    return typeConverter.convert(String.valueOf(cellValue.getBooleanValue()), fieldType);
-                    
-                case ERROR:
-                    logger.warn("Formula evaluation resulted in error: {}", cellValue.getErrorValue());
-                    return null;
-                    
-                default:
-                    return null;
-            }
-        } catch (Exception e) {
-            logger.warn("Failed to evaluate formula cell: {}", e.getMessage());
-            return null;
-        }
-    }
-    
-    /**
-     * Validate instance using configured rules
-     */
-    private static <T> void validateInstance(ExcelConfig config, int rowIndex, List<String> errors) {
-        // Implementation would use the validation framework
-        // This is a simplified version - actual validation would be implemented here
-        config.getGlobalValidationRules().forEach(validator -> {
-            // Apply validation rules
-            // Note: This is a placeholder for actual validation implementation
-            // Real implementation would call validator.validate(instance, errors);
-        });
-    }
-    
-    /**
      * Clear all caches for memory cleanup
      */
     public static void clearCaches() {
@@ -973,8 +661,12 @@ public class ExcelUtil {
         logger.info("All ExcelUtil caches cleared");
     }
     
+    // ============================================================================
+    // SUPPORT CLASSES - BACKWARD COMPATIBILITY
+    // ============================================================================
+    
     /**
-     * Result class for multi-sheet processing
+     * Result class for multi-sheet processing - backward compatibility
      */
     @Getter
     public static class MultiSheetResult {
@@ -989,12 +681,18 @@ public class ExcelUtil {
             this.processedRecords = processedRecords;
             this.errorMessage = errorMessage;
         }
-        public boolean hasErrors() { return !errors.isEmpty() || errorMessage != null; }
-        public boolean isSuccessful() { return errorMessage == null; }
+        
+        public boolean hasErrors() { 
+            return !errors.isEmpty() || errorMessage != null; 
+        }
+        
+        public boolean isSuccessful() { 
+            return errorMessage == null; 
+        }
     }
     
     /**
-     * Configuration for sheet-specific processing
+     * Configuration for sheet-specific processing - backward compatibility
      */
     @Getter
     public static class SheetProcessorConfig {
@@ -1006,37 +704,4 @@ public class ExcelUtil {
             this.batchProcessor = batchProcessor;
         }
     }
-    
-    /**
-     * Write data to CSV file using streaming (không giữ toàn bộ dữ liệu trong RAM)
-     */
-    public static <T> void writeToCSVStreaming(String fileName, List<T> data, ExcelConfig config) throws Exception {
-        ReflectionCache reflectionCache = ReflectionCache.getInstance();
-        @SuppressWarnings("unchecked")
-        Class<T> beanClass = (Class<T>) data.get(0).getClass();
-        java.util.concurrent.ConcurrentMap<String, java.lang.reflect.Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
-        java.util.List<String> columnNames = new java.util.ArrayList<>(excelFields.keySet());
-        try (java.io.BufferedWriter writer = new java.io.BufferedWriter(new java.io.OutputStreamWriter(new java.io.FileOutputStream(fileName), java.nio.charset.StandardCharsets.UTF_8))) {
-            // Write header
-            writer.write(String.join(config.getDelimiter(), columnNames));
-            writer.newLine();
-            // Write data rows
-            for (T item : data) {
-                java.util.List<String> row = new java.util.ArrayList<>();
-                for (String columnName : columnNames) {
-                    java.lang.reflect.Field field = excelFields.get(columnName);
-                    if (field != null) {
-                        field.setAccessible(true);
-                        Object value = field.get(item);
-                        row.add(value != null ? value.toString() : "");
-                    } else {
-                        row.add("");
-                    }
-                }
-                writer.write(String.join(config.getDelimiter(), row));
-                writer.newLine();
-            }
-        }
-    }
 }
-

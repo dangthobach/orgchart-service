@@ -3,7 +3,7 @@ package com.learnmore.application.utils.sax;
 import com.learnmore.application.utils.ExcelColumn;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.converter.TypeConverter;
-import com.learnmore.application.utils.exception.ExcelProcessException;
+
 import com.learnmore.application.utils.validation.ValidationRule;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.openxml4j.opc.OPCPackage;
@@ -118,6 +118,8 @@ public class TrueStreamingSAXProcessor<T> {
         
         private final List<T> currentBatch = new ArrayList<>();
         private final Map<String, Integer> headerMapping = new HashMap<>();
+        private final Set<String> seenUniqueValues = new HashSet<>();
+        private final AtomicLong errorCount = new AtomicLong(0);
         private Object currentInstance;
         private int currentRowNum = 0;
         private boolean headerProcessed = false;
@@ -277,9 +279,70 @@ public class TrueStreamingSAXProcessor<T> {
         }
         
         private void runValidations(Object instance, int rowNum) {
-            for (ValidationRule rule : validationRules) {
-                // Simplified validation - implement as needed
-                // rule.validate(fieldName, instance, colIndex, rowNum);
+            try {
+                // Required fields validation
+                for (String requiredField : config.getRequiredFields()) {
+                    Field field = fieldMapping.get(requiredField);
+                    if (field != null) {
+                        field.setAccessible(true);
+                        Object value = field.get(instance);
+                        if (value == null || (value instanceof String && ((String) value).trim().isEmpty())) {
+                            log.warn("Required field '{}' is empty at row {}", requiredField, rowNum);
+                            errorCount.incrementAndGet();
+                        }
+                    }
+                }
+                
+                // Unique fields validation (simple memory-based check for current batch)
+                for (String uniqueField : config.getUniqueFields()) {
+                    Field field = fieldMapping.get(uniqueField);
+                    if (field != null) {
+                        field.setAccessible(true);
+                        Object value = field.get(instance);
+                        if (value != null) {
+                            String key = uniqueField + ":" + value.toString();
+                            if (seenUniqueValues.contains(key)) {
+                                log.warn("Duplicate value '{}' for unique field '{}' at row {}", 
+                                        value, uniqueField, rowNum);
+                                errorCount.incrementAndGet();
+                            } else {
+                                seenUniqueValues.add(key);
+                            }
+                        }
+                    }
+                }
+                
+                // Custom field validation rules
+                for (Map.Entry<String, ValidationRule> entry : config.getFieldValidationRules().entrySet()) {
+                    String fieldName = entry.getKey();
+                    ValidationRule rule = entry.getValue();
+                    Field field = fieldMapping.get(fieldName);
+                    if (field != null) {
+                        field.setAccessible(true);
+                        Object value = field.get(instance);
+                        if (value != null) {
+                            var result = rule.validate(fieldName, value, rowNum, 0);
+                            if (!result.isValid()) {
+                                log.warn("Validation failed for field '{}' with value '{}' at row {}: {}", 
+                                        fieldName, value, rowNum, result.getErrorMessage());
+                                errorCount.incrementAndGet();
+                            }
+                        }
+                    }
+                }
+                
+                // Global validation rules
+                for (ValidationRule rule : config.getGlobalValidationRules()) {
+                    var result = rule.validate("global", instance, rowNum, 0);
+                    if (!result.isValid()) {
+                        log.warn("Global validation failed for instance at row {}: {}", rowNum, result.getErrorMessage());
+                        errorCount.incrementAndGet();
+                    }
+                }
+                
+            } catch (Exception e) {
+                log.error("Validation error at row {}: {}", rowNum, e.getMessage());
+                errorCount.incrementAndGet();
             }
         }
         

@@ -20,7 +20,7 @@ public class SAXExcelService {
     /**
      * Process Excel file with SAX parser and comprehensive validation
      */
-    public <T> StreamingExcelProcessor.ProcessingResult processExcelWithSAX(
+    public <T> com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult processExcelWithSAX(
             InputStream inputStream, Class<T> beanClass) {
         
         try {
@@ -45,8 +45,8 @@ public class SAXExcelService {
             
             log.info("Starting SAX-based Excel processing for class: {}", beanClass.getSimpleName());
             
-            // Process with batch consumer for memory efficiency
-            StreamingExcelProcessor.ProcessingResult result = ExcelUtil.processExcelStreaming(
+            // Process with true streaming for optimal memory efficiency
+            var result = ExcelUtil.processExcelTrueStreaming(
                 inputStream, beanClass, config, batch -> {
                     log.debug("Processing batch of {} records", batch.size());
                     // Process batch here (save to DB, validate business rules, etc.)
@@ -93,7 +93,7 @@ public class SAXExcelService {
     /**
      * High-performance processing for very large files
      */
-    public <T> StreamingExcelProcessor.ProcessingResult processLargeExcelFile(
+    public <T> com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult processLargeExcelFile(
             InputStream inputStream, Class<T> beanClass) {
         
         try {
@@ -114,7 +114,7 @@ public class SAXExcelService {
             
             log.info("Starting high-performance processing for large Excel file");
             
-            return ExcelUtil.processExcelStreaming(inputStream, beanClass, config, batch -> {
+            return ExcelUtil.processExcelTrueStreaming(inputStream, beanClass, config, batch -> {
                 log.info("Processing large batch of {} records", batch.size());
                 // Efficient batch processing for large datasets
                 processLargeBatch(batch);

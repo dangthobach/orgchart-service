@@ -36,19 +36,23 @@ public class ExcelConfig {
     private Map<String, ValidationRule> fieldValidationRules = new HashMap<>();
     private List<ValidationRule> globalValidationRules = new ArrayList<>();
     
-    // Performance tuning
+    // Performance tuning - Production optimized values
     private boolean useStreamingParser = true;
-    private int maxErrorsBeforeAbort = 1000;
+    private int maxErrorsBeforeAbort = 500; // Lower for production - fail fast
     private boolean enableDataTypeCache = true;
     private boolean enableReflectionCache = true;
     
-    // Excel Processing Strategy Configuration
-    private long cellCountThresholdForSXSSF = 2_000_000L; // 2 triệu ô -> chuyển SXSSF
-    private int sxssfRowAccessWindowSize = 500; // Số hàng giữ trong RAM cho SXSSF
-    private long maxCellsForXSSF = 1_500_000L; // 1.5 triệu ô tối đa cho XSSF
-    private boolean forceStreamingMode = false; // Bắt buộc dùng streaming
-    private boolean preferCSVForLargeData = true; // Ưu tiên CSV cho dữ liệu rất lớn
-    private long csvThreshold = 5_000_000L; // >5 triệu ô -> khuyến nghị CSV
+    // Memory management - Production thresholds
+    private boolean enableMemoryGC = true; // Auto GC when memory threshold reached
+    private int memoryCheckInterval = 1000; // Check memory every 1000 records
+    
+    // Excel Processing Strategy Configuration - Tuned for 1-2M records
+    private long cellCountThresholdForSXSSF = 1_500_000L; // 1.5M cells -> SXSSF (lower for safety)
+    private int sxssfRowAccessWindowSize = 1000; // Larger window for better performance
+    private long maxCellsForXSSF = 1_000_000L; // 1M cells max for XSSF (conservative)
+    private boolean forceStreamingMode = true; // Force streaming for production
+    private boolean preferCSVForLargeData = true; // Strongly prefer CSV for large data
+    private long csvThreshold = 3_000_000L; // Lower threshold for CSV recommendation
     
     // Format constraints
     private boolean allowXLSFormat = false; // Mặc định không cho phép .xls (giới hạn 65k hàng)

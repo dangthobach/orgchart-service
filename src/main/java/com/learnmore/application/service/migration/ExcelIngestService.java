@@ -148,8 +148,8 @@ public class ExcelIngestService {
         // Batch processor để lưu vào staging_raw
         List<StagingRaw> batchBuffer = new ArrayList<>();
         
-        // Sử dụng processExcelStreaming từ ExcelUtil
-        ExcelUtil.processExcelStreaming(inputStream, ExcelRowDTO.class, config, batch -> {
+        // Sử dụng processExcelTrueStreaming cho better performance
+        ExcelUtil.processExcelTrueStreaming(inputStream, ExcelRowDTO.class, config, batch -> {
             
             // Convert ExcelRowDTO to StagingRaw entities
             List<StagingRaw> stagingEntities = convertToStagingRaw(batch, jobId);
