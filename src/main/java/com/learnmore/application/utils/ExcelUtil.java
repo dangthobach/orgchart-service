@@ -15,8 +15,10 @@ import org.slf4j.LoggerFactory;
 import java.io.*;
 import java.lang.reflect.Field;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Consumer;
+import com.learnmore.application.utils.parallel.ParallelBatchProcessor;
 
 /**
  * Refactored Excel utility class optimized for true streaming processing
@@ -37,7 +39,7 @@ public class ExcelUtil {
     // Default configuration optimized for true streaming
     private static final ExcelConfig DEFAULT_CONFIG = ExcelConfig.builder()
             .batchSize(1000)
-            .memoryThresholdMB(512)
+            .memoryThreshold(512)
             .enableMemoryMonitoring(true)
             .cellCountThresholdForSXSSF(1_500_000L)
             .maxCellsForXSSF(1_000_000L)
@@ -73,6 +75,14 @@ public class ExcelUtil {
         
         logger.info("Processed {} records with true streaming", processingResult.getProcessedRecords());
         return results;
+    }
+    
+    /**
+     * Legacy method name for backward compatibility - delegates to processExcel
+     */
+    public static <T> List<T> processExcelToList(InputStream inputStream, Class<T> beanClass, ExcelConfig config)
+            throws ExcelProcessException {
+        return processExcel(inputStream, beanClass, config);
     }
     
     /**
@@ -193,6 +203,133 @@ public class ExcelUtil {
     }
     
     // ============================================================================
+    // ASYNC I/O INTEGRATION - NON-BLOCKING PROCESSING
+    // ============================================================================
+    
+    /**
+     * Process Excel file asynchronously with CompletableFuture
+     * Non-blocking I/O for large datasets
+     */
+    public static <T> CompletableFuture<com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult> 
+            processExcelAsync(InputStream inputStream, Class<T> beanClass, ExcelConfig config,
+                            Consumer<List<T>> batchProcessor) {
+        
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return processExcelTrueStreaming(inputStream, beanClass, config, batchProcessor);
+            } catch (ExcelProcessException e) {
+                logger.error("Async Excel processing failed: {}", e.getMessage(), e);
+                throw new RuntimeException("Async processing failed", e);
+            }
+        });
+    }
+    
+    /**
+     * Process Excel file asynchronously with custom executor service
+     */
+    public static <T> CompletableFuture<com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult> 
+            processExcelAsync(InputStream inputStream, Class<T> beanClass, ExcelConfig config,
+                            Consumer<List<T>> batchProcessor, ExecutorService executor) {
+        
+        return CompletableFuture.supplyAsync(() -> {
+            try {
+                return processExcelTrueStreaming(inputStream, beanClass, config, batchProcessor);
+            } catch (ExcelProcessException e) {
+                logger.error("Async Excel processing failed: {}", e.getMessage(), e);
+                throw new RuntimeException("Async processing failed", e);
+            }
+        }, executor);
+    }
+    
+    /**
+     * Process Excel with parallel batch processing
+     * Each batch is processed in parallel using thread pool
+     */
+    public static <T> ParallelBatchProcessor.ParallelProcessingResult 
+            processExcelParallel(InputStream inputStream, Class<T> beanClass, ExcelConfig config,
+                               Consumer<List<T>> batchProcessor, int threadPoolSize) throws ExcelProcessException {
+        
+        if (!config.isParallelProcessing()) {
+            logger.warn("Parallel processing is disabled in config. Enable it for better performance.");
+        }
+        
+        // Use parallel batch processor for high-throughput processing
+        ParallelBatchProcessor<T> parallelProcessor = new ParallelBatchProcessor<>(batchProcessor, threadPoolSize);
+        
+        try {
+            // Collect batches first (for parallel processing)
+            List<List<T>> batches = new ArrayList<>();
+            Consumer<List<T>> batchCollector = batches::add;
+            
+            // Process with true streaming to collect batches
+            processExcelTrueStreaming(inputStream, beanClass, config, batchCollector);
+            
+            logger.info("Collected {} batches for parallel processing", batches.size());
+            
+            // Process all batches in parallel
+            var parallelResult = parallelProcessor.processAllBatches(batches);
+            
+            logger.info("Parallel processing completed: {} records in {}ms ({:.2f} records/sec)", 
+                    parallelResult.getTotalRecords(),
+                    parallelResult.getTotalProcessingTimeMs(),
+                    parallelResult.getRecordsPerSecond());
+            
+            return parallelResult;
+            
+        } finally {
+            parallelProcessor.shutdown();
+        }
+    }
+    
+    /**
+     * Process multiple Excel files asynchronously and combine results
+     */
+    public static <T> CompletableFuture<List<com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult>> 
+            processMultipleExcelFilesAsync(List<InputStream> inputStreams, Class<T> beanClass, 
+                                         ExcelConfig config, Consumer<List<T>> batchProcessor) {
+        
+        List<CompletableFuture<com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult>> futures = 
+            new ArrayList<>();
+        
+        for (int i = 0; i < inputStreams.size(); i++) {
+            InputStream inputStream = inputStreams.get(i);
+            final int fileIndex = i;
+            
+            CompletableFuture<com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult> future = 
+                CompletableFuture.supplyAsync(() -> {
+                    try {
+                        logger.info("Processing file #{} asynchronously", fileIndex + 1);
+                        return processExcelTrueStreaming(inputStream, beanClass, config, batchProcessor);
+                    } catch (ExcelProcessException e) {
+                        logger.error("Failed to process file #{}: {}", fileIndex + 1, e.getMessage(), e);
+                        throw new RuntimeException("File processing failed", e);
+                    }
+                });
+            
+            futures.add(future);
+        }
+        
+        // Combine all results
+        return CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]))
+                .thenApply(v -> {
+                    List<com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult> results = 
+                        new ArrayList<>();
+                    
+                    for (CompletableFuture<com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult> future : futures) {
+                        try {
+                            results.add(future.get());
+                        } catch (InterruptedException | ExecutionException e) {
+                            logger.error("Failed to get async result: {}", e.getMessage(), e);
+                            throw new RuntimeException("Failed to collect async results", e);
+                        }
+                    }
+                    
+                    logger.info("Completed processing {} files asynchronously", results.size());
+                    return results;
+                });
+    }
+    
+    // ============================================================================
     // EXCEL WRITING METHODS - OPTIMIZED FOR PERFORMANCE
     // ============================================================================
     
@@ -267,7 +404,8 @@ public class ExcelUtil {
                     
                 default:
                     // Fallback to SXSSF
-                    writeToExcelStreamingSXSSF(fileName, data, rowStart, columnStart, config);
+                    int defaultWindowSize = config.getSxssfRowAccessWindowSize();
+                    writeToExcelStreamingSXSSF(fileName, data, rowStart, columnStart, config, defaultWindowSize);
             }
             
         } catch (Exception e) {
@@ -284,6 +422,13 @@ public class ExcelUtil {
      */
     public static <T> byte[] writeToExcelBytes(List<T> data) throws ExcelProcessException {
         return writeToExcelBytes(data, 0, 0, DEFAULT_CONFIG);
+    }
+    
+    /**
+     * Write data to Excel bytes with custom start positions
+     */
+    public static <T> byte[] writeToExcelBytes(List<T> data, Integer rowStart, Integer columnStart) throws ExcelProcessException {
+        return writeToExcelBytes(data, rowStart, columnStart, DEFAULT_CONFIG);
     }
     
     /**
@@ -305,7 +450,7 @@ public class ExcelUtil {
             writeToExcelStreamingSXSSFBytes(data, rowStart, columnStart, config, windowSize, outputStream);
             return outputStream.toByteArray();
             
-        } catch (IOException e) {
+        } catch (Exception e) {
             throw new ExcelProcessException("Failed to generate Excel bytes", e);
         }
     }
@@ -703,5 +848,96 @@ public class ExcelUtil {
             this.beanClass = beanClass;
             this.batchProcessor = batchProcessor;
         }
+    }
+    
+    // ============================================================================
+    // BACKWARD COMPATIBILITY METHODS
+    // ============================================================================
+    
+    /**
+     * Legacy method for streaming processing - backward compatibility
+     * @deprecated Use processExcelTrueStreaming instead
+     */
+    @Deprecated
+    public static <T> com.learnmore.application.utils.streaming.StreamingExcelProcessor.ProcessingResult 
+            processExcelStreaming(InputStream inputStream, Class<T> beanClass, ExcelConfig config, 
+                                Consumer<List<T>> batchProcessor) throws ExcelProcessException {
+        
+        // Delegate to true streaming and convert result
+        var trueStreamingResult = processExcelTrueStreaming(inputStream, beanClass, config, batchProcessor);
+        
+        // Convert result to legacy format
+        return new com.learnmore.application.utils.streaming.StreamingExcelProcessor.ProcessingResult(
+                trueStreamingResult.getProcessedRecords(),
+                trueStreamingResult.getErrorCount(),
+                Collections.emptyList(), // validation errors not available in legacy format
+                trueStreamingResult.getProcessingTimeMs()
+        );
+    }
+    
+    /**
+     * Legacy method for multi-sheet processing - backward compatibility
+     * @deprecated Use processMultiSheetExcelTrueStreaming instead
+     */
+    @Deprecated
+    public static Map<String, MultiSheetResult> processMultiSheetExcel(
+            InputStream inputStream, 
+            Map<String, Class<?>> sheetConfigurations, 
+            ExcelConfig config) throws ExcelProcessException {
+        
+        // Create empty processors for each sheet (backward compatibility)
+        Map<String, Consumer<List<?>>> emptyProcessors = new HashMap<>();
+        for (String sheetName : sheetConfigurations.keySet()) {
+            emptyProcessors.put(sheetName, batch -> {
+                // Empty processor for backward compatibility
+            });
+        }
+        
+        // Process each sheet with true streaming
+        Map<String, com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult> trueStreamingResults = 
+                processMultiSheetExcelTrueStreaming(inputStream, sheetConfigurations, emptyProcessors, config);
+        
+        // Convert results to legacy format
+        Map<String, MultiSheetResult> legacyResults = new HashMap<>();
+        for (Map.Entry<String, com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult> entry : 
+                trueStreamingResults.entrySet()) {
+            
+            var result = entry.getValue();
+            MultiSheetResult legacyResult = new MultiSheetResult(
+                    Collections.emptyList(), // data not collected in streaming mode
+                    Collections.emptyList(), // errors not available in legacy format
+                    (int) result.getProcessedRecords(),
+                    result.getErrorCount() > 0 ? "Processing had " + result.getErrorCount() + " errors" : null
+            );
+            
+            legacyResults.put(entry.getKey(), legacyResult);
+        }
+        
+        return legacyResults;
+    }
+    
+    /**
+     * Legacy method for multi-sheet streaming processing - backward compatibility
+     * @deprecated Use processMultiSheetExcelTrueStreaming instead
+     */
+    @Deprecated
+    @SuppressWarnings("unchecked")
+    public static Map<String, com.learnmore.application.utils.sax.TrueStreamingSAXProcessor.ProcessingResult> 
+            processMultiSheetExcelStreaming(
+                    InputStream inputStream, 
+                    Map<String, SheetProcessorConfig> sheetConfigurations, 
+                    ExcelConfig config) throws ExcelProcessException {
+        
+        // Convert SheetProcessorConfig to class mapping and processors
+        Map<String, Class<?>> simpleConfigurations = new HashMap<>();
+        Map<String, Consumer<List<?>>> processors = new HashMap<>();
+        
+        for (Map.Entry<String, SheetProcessorConfig> entry : sheetConfigurations.entrySet()) {
+            simpleConfigurations.put(entry.getKey(), entry.getValue().getBeanClass());
+            // Cast the processor to generic consumer
+            processors.put(entry.getKey(), (Consumer<List<?>>) entry.getValue().getBatchProcessor());
+        }
+        
+        return processMultiSheetExcelTrueStreaming(inputStream, simpleConfigurations, processors, config);
     }
 }
