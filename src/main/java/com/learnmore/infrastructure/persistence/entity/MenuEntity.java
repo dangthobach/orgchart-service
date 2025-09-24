@@ -24,6 +24,7 @@ public class MenuEntity extends AuditEntity {
 
     private String icon;
 
+    @Column(name = "`order`")
     private Integer order;
 
     @ManyToOne(fetch = FetchType.LAZY)

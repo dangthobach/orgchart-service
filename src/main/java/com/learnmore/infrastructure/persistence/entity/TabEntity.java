@@ -23,6 +23,7 @@ public class TabEntity extends AuditEntity {
     @Column(nullable = false)
     private String path;
 
+    @Column(name = "`order`")
     private Integer order;
 
     @ManyToOne(fetch = FetchType.LAZY)

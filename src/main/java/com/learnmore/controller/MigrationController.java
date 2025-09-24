@@ -22,7 +22,7 @@ import java.util.concurrent.CompletableFuture;
  * Cung cấp các endpoint để thực hiện migration Excel data
  */
 @RestController
-@RequestMapping("/api/migration")
+@RequestMapping("/migration")
 @RequiredArgsConstructor
 @Slf4j
 @Tag(name = "Excel Migration", description = "APIs for Excel data migration to master tables")

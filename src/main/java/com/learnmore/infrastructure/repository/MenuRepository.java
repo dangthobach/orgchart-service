@@ -12,9 +12,6 @@ import java.util.UUID;
 public interface MenuRepository extends JpaRepository<MenuEntity, UUID> {
     List<MenuEntity> findByParentIsNull();
     
-    @Query("SELECT DISTINCT m FROM Menu m " +
-           "JOIN m.roles r " +
-           "JOIN r.users u " +
-           "WHERE u.id = :userId AND m.parent IS NULL")
-    List<MenuEntity> findRootMenusByUserId(UUID userId);
+    // Temporarily disabled - need to implement proper user-menu relationship
+    // List<MenuEntity> findRootMenusByUserId(UUID userId);
 } 

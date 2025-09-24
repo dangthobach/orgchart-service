@@ -84,7 +84,12 @@ public class ExcelDimensionValidator {
     }
     
     private static DimensionInfo readDimension(InputStream inputStream) throws Exception {
-        try (OPCPackage opcPackage = OPCPackage.open(inputStream)) {
+        // Tạo một copy của stream để tránh việc đóng stream gốc
+        byte[] streamData = inputStream.readAllBytes();
+        
+        try (java.io.ByteArrayInputStream copyStream = new java.io.ByteArrayInputStream(streamData);
+             OPCPackage opcPackage = OPCPackage.open(copyStream)) {
+            
             XSSFReader xssfReader = new XSSFReader(opcPackage);
             // SharedStringsTable sharedStringsTable = xssfReader.getSharedStringsTable();
             

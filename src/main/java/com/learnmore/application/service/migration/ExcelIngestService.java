@@ -67,43 +67,48 @@ public class ExcelIngestService {
         migrationJobRepository.save(migrationJob);
         
         try {
-            // Wrap InputStream với BufferedInputStream để hỗ trợ mark/reset
-            inputStream = ExcelDimensionValidator.wrapWithBuffer(inputStream);
+            // Tạo một copy của stream để validation và processing riêng biệt
+            byte[] streamData = inputStream.readAllBytes();
             
-            // Validate số lượng bản ghi nếu có giới hạn
+            // Validate số lượng bản ghi nếu có giới hạn (sử dụng copy stream)
             int actualDataRows = 0;
             if (maxRows > 0) {
-                actualDataRows = ExcelDimensionValidator.validateRowCount(inputStream, maxRows, 1); // startRow = 1 (skip header)
-                log.info("Dimension validation passed. Actual data rows: {}, Max allowed: {}", actualDataRows, maxRows);
+                try (java.io.ByteArrayInputStream validationStream = new java.io.ByteArrayInputStream(streamData)) {
+                    actualDataRows = ExcelDimensionValidator.validateRowCount(
+                        ExcelDimensionValidator.wrapWithBuffer(validationStream), maxRows, 1); // startRow = 1 (skip header)
+                    log.info("Dimension validation passed. Actual data rows: {}, Max allowed: {}", actualDataRows, maxRows);
+                }
             }
             
-            // Thực hiện ingest
-            IngestResult result = performIngest(inputStream, jobId);
-            
-            // Cập nhật job status
-            migrationJob.setStatus("INGESTING_COMPLETED");
-            migrationJob.setCurrentPhase("INGEST_COMPLETED");
-            migrationJob.setTotalRows(result.getTotalRows());
-            migrationJob.setProcessedRows(result.getProcessedRows());
-            migrationJob.setProgressPercent(100.0);
-            migrationJob.setProcessingTimeMs(result.getProcessingTimeMs());
-            
-            migrationJobRepository.save(migrationJob);
-            
-            log.info("Excel ingest completed successfully. JobId: {}, ProcessedRows: {}", 
-                    jobId, result.getProcessedRows());
-            
-            return MigrationResultDTO.builder()
-                    .jobId(jobId)
-                    .status("INGESTING_COMPLETED")
-                    .filename(filename)
-                    .totalRows(result.getTotalRows())
-                    .processedRows(result.getProcessedRows())
-                    .currentPhase("INGEST_COMPLETED")
-                    .progressPercent(100.0)
-                    .startedAt(migrationJob.getStartedAt())
-                    .ingestTimeMs(result.getProcessingTimeMs())
-                    .build();
+            // Thực hiện ingest với stream mới
+            try (java.io.ByteArrayInputStream processingStream = new java.io.ByteArrayInputStream(streamData)) {
+                IngestResult result = performIngest(processingStream, jobId);
+                
+                // Cập nhật job status
+                migrationJob.setStatus("INGESTING_COMPLETED");
+                migrationJob.setCurrentPhase("INGEST_COMPLETED");
+                migrationJob.setTotalRows(result.getTotalRows());
+                migrationJob.setProcessedRows(result.getProcessedRows());
+                migrationJob.setProgressPercent(100.0);
+                migrationJob.setProcessingTimeMs(result.getProcessingTimeMs());
+                
+                migrationJobRepository.save(migrationJob);
+                
+                log.info("Excel ingest completed successfully. JobId: {}, ProcessedRows: {}", 
+                        jobId, result.getProcessedRows());
+                
+                return MigrationResultDTO.builder()
+                        .jobId(jobId)
+                        .status("INGESTING_COMPLETED")
+                        .filename(filename)
+                        .totalRows(result.getTotalRows())
+                        .processedRows(result.getProcessedRows())
+                        .currentPhase("INGEST_COMPLETED")
+                        .progressPercent(100.0)
+                        .startedAt(migrationJob.getStartedAt())
+                        .ingestTimeMs(result.getProcessingTimeMs())
+                        .build();
+            }
                     
         } catch (Exception e) {
             log.error("Excel ingest failed. JobId: {}, Error: {}", jobId, e.getMessage(), e);

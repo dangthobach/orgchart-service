@@ -73,7 +73,12 @@ public class ExcelEarlyValidator {
      */
     private static DimensionInfo readDimensionFast(InputStream inputStream) throws Exception {
         
-        try (OPCPackage opcPackage = OPCPackage.open(inputStream)) {
+        // Tạo copy của stream để tránh việc đóng stream gốc
+        byte[] streamData = inputStream.readAllBytes();
+        
+        try (java.io.ByteArrayInputStream copyStream = new java.io.ByteArrayInputStream(streamData);
+             OPCPackage opcPackage = OPCPackage.open(copyStream)) {
+            
             XSSFReader xssfReader = new XSSFReader(opcPackage);
             
             // Get first sheet

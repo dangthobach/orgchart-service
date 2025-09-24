@@ -1,20 +1,36 @@
 spring:
   application:
     name: orgchart-service
+  profiles:
+    active: dev
   datasource:
-    url: jdbc:postgresql://localhost:5432/postgres
-    username: postgres
-    password: postgres
-    driver-class-name: org.postgresql.Driver
+    url: jdbc:h2:mem:devdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: password
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
+      settings:
+        web-allow-others: true
   jpa:
     hibernate:
-      ddl-auto: update
+      ddl-auto: create-drop
+      naming:
+        physical-strategy: org.hibernate.boot.model.naming.PhysicalNamingStrategyStandardImpl
+        implicit-strategy: org.hibernate.boot.model.naming.ImplicitNamingStrategyLegacyJpaImpl
     show-sql: true
     properties:
       hibernate:
-        format_sql: true
-        dialect: org.hibernate.dialect.PostgreSQLDialect
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
+        '[format_sql]': true
+        dialect: org.hibernate.dialect.H2Dialect
+        '[hbm2ddl.halt_on_error]': false
+        '[globally_quoted_identifiers]': false
+        '[hbm2ddl.create_namespaces]': false
+        '[hbm2ddl.schema_generation_script_skip_foreign_keys]': false
+        '[hbm2ddl.auto_quote_keyword]': true
+    database-platform: org.hibernate.dialect.H2Dialect
 
 # Server configuration
 server:
@@ -25,6 +41,6 @@ server:
 # Logging configuration
 logging:
   level:
-    org.hibernate.SQL: DEBUG
-    org.hibernate.type.descriptor.sql.BasicBinder: TRACE
-    com.learnmore: DEBUG
+    '[org.hibernate.SQL]': DEBUG
+    '[org.hibernate.type.descriptor.sql.BasicBinder]': TRACE
+    '[com.learnmore]': DEBUG
