@@ -130,11 +130,12 @@ public class ExcelUtil {
             long startTime = System.currentTimeMillis();
             long startMemory = Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory();
             
-            // Use TRUE streaming processor - không tích lũy kết quả
+            // Use TRUE streaming processor với MethodHandle optimization - không tích lũy kết quả
             com.learnmore.application.utils.sax.TrueStreamingSAXProcessor<T> trueProcessor = 
                 new com.learnmore.application.utils.sax.TrueStreamingSAXProcessor<>(
                     beanClass, config, validationRules, batchProcessor);
             
+            logger.info("Processing with MethodHandle-optimized TrueStreamingSAXProcessor");
             var result = trueProcessor.processExcelStreamTrue(inputStream);
             
             // Performance logging

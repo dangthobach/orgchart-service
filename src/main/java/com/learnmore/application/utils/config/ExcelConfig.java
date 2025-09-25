@@ -67,6 +67,7 @@ public class ExcelConfig {
     // Processing configuration
     private int startRow = 0; // 0-based index for header row
     private boolean autoSizeColumns = true; // Default auto-size columns for better presentation
+    private String jobId; // Job ID for tracking processing tasks
     
     // POI Performance Optimizations - Based on benchmark analysis
     private boolean disableAutoSizing = false; // Major performance impact for large datasets
@@ -296,6 +297,11 @@ public class ExcelConfig {
             return this;
         }
         
+        public Builder jobId(String jobId) {
+            config.jobId = jobId;
+            return this;
+        }
+        
         public ExcelConfig build() {
             return config;
         }
@@ -466,6 +472,10 @@ public class ExcelConfig {
     
     public int getMaxColsForXLS() {
         return maxColsForXLS;
+    }
+    
+    public String getJobId() {
+        return jobId;
     }
     
     // Setters (if needed for dynamic configuration)

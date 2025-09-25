@@ -112,6 +112,7 @@ public class ExcelRowDTO {
     // Transient fields for internal processing
     private Integer rowNumber;
     private String jobId;
+    private Integer rowNum; // Vị trí dòng trong sheet (1-based)
     
     /**
      * Chuẩn hóa dữ liệu sau khi đọc từ Excel
