@@ -86,15 +86,8 @@ public class ExcelConfigValidator {
                         ") too large, may cause memory issues");
         }
         
-        // Range validation
-        if (config.isEnableRangeValidation()) {
-            if (config.getMinValue() != null && config.getMaxValue() != null) {
-                if (config.getMinValue() > config.getMaxValue()) {
-                    errors.add("Min value (" + config.getMinValue() + 
-                              ") cannot be greater than max value (" + config.getMaxValue() + ")");
-                }
-            }
-        }
+        // REMOVED: Range validation check
+        // Range validation moved to field-specific ValidationRule
         
         // Progress tracking validation
         if (config.isEnableProgressTracking() && config.getProgressReportInterval() <= 0) {
@@ -135,6 +128,8 @@ public class ExcelConfigValidator {
                                              validation.getErrors());
         }
         
+        // NOTE: Caching (dataType, reflection) and streaming parser always enabled internally
+        // NOTE: Range validation moved to field-specific ValidationRule
         return ExcelConfig.builder()
             .batchSize(config.getBatchSize())
             .memoryThreshold(config.getMemoryThresholdMB())
@@ -148,10 +143,7 @@ public class ExcelConfigValidator {
             .enableProgressTracking(config.isEnableProgressTracking())
             .enableMemoryMonitoring(config.isEnableMemoryMonitoring())
             .progressReportInterval(config.getProgressReportInterval())
-            .useStreamingParser(config.isUseStreamingParser())
             .maxErrorsBeforeAbort(config.getMaxErrorsBeforeAbort())
-            .enableDataTypeCache(config.isEnableDataTypeCache())
-            .enableReflectionCache(config.isEnableReflectionCache())
             .cellCountThresholdForSXSSF(config.getCellCountThresholdForSXSSF())
             .sxssfRowAccessWindowSize(config.getSxssfRowAccessWindowSize())
             .maxCellsForXSSF(config.getMaxCellsForXSSF())
@@ -161,9 +153,6 @@ public class ExcelConfigValidator {
             .allowXLSFormat(config.isAllowXLSFormat())
             .maxRowsForXLS(config.getMaxRowsForXLS())
             .maxColsForXLS(config.getMaxColsForXLS())
-            .enableRangeValidation(config.isEnableRangeValidation())
-            .minValue(config.getMinValue())
-            .maxValue(config.getMaxValue())
             .startRow(config.getStartRow())
             .autoSizeColumns(config.isAutoSizeColumns())
             .disableAutoSizing(config.isDisableAutoSizing())
@@ -183,32 +172,29 @@ public class ExcelConfigValidator {
         ExcelConfig.Builder builder = ExcelConfig.builder();
         
         // Base configuration based on file size
+        // NOTE: Streaming always enabled in TrueStreamingSAXProcessor
         if (estimatedRows < 10000) {
-            // Small file
+            // Small file - disable progress tracking for cleaner logs
             builder.batchSize(1000)
                    .memoryThreshold(100)
-                   .useStreamingParser(false)
                    .enableProgressTracking(false);
         } else if (estimatedRows < 100000) {
             // Medium file
             builder.batchSize(5000)
                    .memoryThreshold(200)
-                   .useStreamingParser(false)
                    .enableProgressTracking(true)
                    .progressReportInterval(10000);
         } else if (estimatedRows < 1000000) {
-            // Large file
+            // Large file - True Streaming required
             builder.batchSize(10000)
                    .memoryThreshold(500)
-                   .useStreamingParser(true)
                    .forceStreamingMode(true)
                    .enableProgressTracking(true)
                    .progressReportInterval(50000);
         } else {
-            // Extra large file
+            // Extra large file - True Streaming with aggressive memory optimization
             builder.batchSize(50000)
                    .memoryThreshold(1000)
-                   .useStreamingParser(true)
                    .forceStreamingMode(true)
                    .enableProgressTracking(true)
                    .progressReportInterval(100000)
@@ -230,11 +216,10 @@ public class ExcelConfigValidator {
                 break;
             case "prod":
             case "production":
+                // NOTE: Caching always enabled, no need to specify
                 builder.strictValidation(false)
                        .failOnFirstError(false)
-                       .maxErrorsBeforeAbort(500)
-                       .enableReflectionCache(true)
-                       .enableDataTypeCache(true);
+                       .maxErrorsBeforeAbort(500);
                 break;
             default:
                 // Default to production settings

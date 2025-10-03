@@ -150,10 +150,10 @@ class ExcelUtilTest {
         int recordCount = 100000;
         List<TestEntity> testData = generateTestData(recordCount);
         
+        // Streaming always enabled in TrueStreamingSAXProcessor
         ExcelConfig streamingConfig = ExcelConfig.builder()
                 .batchSize(5000)
                 .memoryThreshold(200)
-                .useStreamingParser(true)
                 .enableProgressTracking(true)
                 .progressReportInterval(10000)
                 .build();

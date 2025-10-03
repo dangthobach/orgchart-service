@@ -13,17 +13,15 @@ public class ExcelConfigFactory {
     /**
      * Configuration for small files (< 50K records)
      * Optimized for speed with relaxed memory constraints
+     * NOTE: Caching always enabled, streaming always used in TrueStreamingSAXProcessor
      */
     public static ExcelConfig createSmallFileConfig() {
         return ExcelConfig.builder()
                 .batchSize(2000)
                 .memoryThreshold(256)
                 .maxErrorsBeforeAbort(100)
-                .enableProgressTracking(false)
-                .enableMemoryMonitoring(false)
-                .useStreamingParser(true)
-                .enableDataTypeCache(true)
-                .enableReflectionCache(true)
+                .enableProgressTracking(false)  // Disable for cleaner logs on small files
+                .enableMemoryMonitoring(false)  // Not needed for small files
                 .build();
     }
     
@@ -39,12 +37,9 @@ public class ExcelConfigFactory {
                 .enableProgressTracking(true)
                 .enableMemoryMonitoring(true)
                 .progressReportInterval(10000)
-                .useStreamingParser(true)
-                .enableDataTypeCache(true)
-                .enableReflectionCache(true)
                 .build();
     }
-    
+
     /**
      * Configuration for large files (500K - 2M records)
      * Optimized for memory efficiency and stability
@@ -57,12 +52,9 @@ public class ExcelConfigFactory {
                 .enableProgressTracking(true)
                 .enableMemoryMonitoring(true)
                 .progressReportInterval(50000)
-                .useStreamingParser(true)
-                .enableDataTypeCache(true)
-                .enableReflectionCache(true)
                 .build();
     }
-    
+
     /**
      * Configuration for production environment
      * Conservative settings with comprehensive monitoring
@@ -75,13 +67,10 @@ public class ExcelConfigFactory {
                 .enableProgressTracking(true)
                 .enableMemoryMonitoring(true)
                 .progressReportInterval(25000)
-                .useStreamingParser(true)
                 .strictValidation(true)
-                .enableDataTypeCache(true)
-                .enableReflectionCache(true)
                 .build();
     }
-    
+
     /**
      * Configuration for migration/ETL jobs
      * Optimized for throughput with error tolerance
@@ -94,14 +83,11 @@ public class ExcelConfigFactory {
                 .enableProgressTracking(true)
                 .enableMemoryMonitoring(true)
                 .progressReportInterval(100000)
-                .useStreamingParser(true)
                 .strictValidation(false)
                 .failOnFirstError(false)
-                .enableDataTypeCache(true)
-                .enableReflectionCache(true)
                 .build();
     }
-    
+
     /**
      * Configuration for development/testing
      * Verbose logging and lenient settings
@@ -114,11 +100,8 @@ public class ExcelConfigFactory {
                 .enableProgressTracking(true)
                 .enableMemoryMonitoring(true)
                 .progressReportInterval(1000)
-                .useStreamingParser(true)
                 .strictValidation(true)
                 .failOnFirstError(true)
-                .enableDataTypeCache(true)
-                .enableReflectionCache(true)
                 .build();
     }
     

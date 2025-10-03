@@ -78,16 +78,16 @@ public class ExcelWriterFactory {
          * Fast data export - Optimized for speed over formatting
          */
         public static <T> ExcelWriter<T> fastDataExport(Class<T> beanClass) throws ExcelProcessException {
+            // Note: SAX streaming is always enabled
             ExcelConfig config = ExcelConfig.builder()
                 .batchSize(50000)
-                .useStreamingParser(true)
                 .minimizeMemoryFootprint(true)
                 .disableAutoSizing(true)
                 .enableCellStyleOptimization(true)
                 .compressOutput(false) // Faster without compression
                 .flushInterval(5000)
                 .build();
-            
+
             return createWriterForStrategy(WritingStrategy.OPTIMIZED_STREAMING, beanClass, config);
         }
         
@@ -110,18 +110,17 @@ public class ExcelWriterFactory {
          * High performance - Maximum throughput for large datasets
          */
         public static <T> ExcelWriter<T> highPerformance(Class<T> beanClass) throws ExcelProcessException {
+            // Note: Data type caching and reflection caching are always enabled
             ExcelConfig config = ExcelConfig.builder()
                 .batchSize(100000)
                 .parallelProcessing(true)
                 .threadPoolSize(Runtime.getRuntime().availableProcessors())
                 .enableCellStyleOptimization(true)
-                .enableDataTypeCache(true)
-                .enableReflectionCache(true)
                 .disableAutoSizing(true)
                 .minimizeMemoryFootprint(true)
                 .flushInterval(10000)
                 .build();
-            
+
             return createWriterForStrategy(WritingStrategy.PARALLEL_WRITE, beanClass, config);
         }
         
@@ -181,12 +180,11 @@ public class ExcelWriterFactory {
          * Production profile - Optimized for performance
          */
         public static ExcelConfig production() {
+            // Note: Data type caching and reflection caching are always enabled
             return ExcelConfig.builder()
                 .batchSize(10000)
                 .disableAutoSizing(true)
                 .enableCellStyleOptimization(true)
-                .enableDataTypeCache(true)
-                .enableReflectionCache(true)
                 .minimizeMemoryFootprint(true)
                 .enableProgressTracking(true)
                 .progressReportInterval(50000)
@@ -198,13 +196,12 @@ public class ExcelWriterFactory {
          * Batch processing profile - For scheduled jobs
          */
         public static ExcelConfig batch() {
+            // Note: Data type caching and reflection caching are always enabled
             return ExcelConfig.builder()
                 .batchSize(50000)
                 .parallelProcessing(true)
                 .threadPoolSize(Runtime.getRuntime().availableProcessors())
                 .enableCellStyleOptimization(true)
-                .enableDataTypeCache(true)
-                .enableReflectionCache(true)
                 .disableAutoSizing(true)
                 .minimizeMemoryFootprint(true)
                 .compressOutput(false) // Faster without compression for batch

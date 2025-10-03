@@ -37,14 +37,12 @@ public class ExcelConfig {
     private List<ValidationRule> globalValidationRules = new ArrayList<>();
     
     // Performance tuning - Production optimized values
-    private boolean useStreamingParser = true;
+    // Note: Removed useStreamingParser - TrueStreamingSAXProcessor always uses SAX streaming
+    // Note: Removed enableDataTypeCache - TypeConverter singleton always caches internally
+    // Note: Removed enableReflectionCache - MethodHandleMapper/ReflectionCache always cache
+    // Note: Removed enableMemoryGC - MemoryMonitor automatically triggers GC when CRITICAL
+    // Note: Removed memoryCheckInterval - MemoryMonitor uses fixed 5-second interval
     private int maxErrorsBeforeAbort = 500; // Lower for production - fail fast
-    private boolean enableDataTypeCache = true;
-    private boolean enableReflectionCache = true;
-    
-    // Memory management - Production thresholds
-    private boolean enableMemoryGC = true; // Auto GC when memory threshold reached
-    private int memoryCheckInterval = 1000; // Check memory every 1000 records
     
     // Excel Processing Strategy Configuration - Tuned for 1-2M records
     private long cellCountThresholdForSXSSF = 1_500_000L; // 1.5M cells -> SXSSF (lower for safety)
@@ -59,10 +57,8 @@ public class ExcelConfig {
     private int maxRowsForXLS = 65_535; // Giới hạn .xls
     private int maxColsForXLS = 256; // Giới hạn cột .xls
     
-    // Range validation
-    private boolean enableRangeValidation = false;
-    private Double minValue = null;
-    private Double maxValue = null;
+    // Range validation - REMOVED: Use field-specific ValidationRule instead
+    // Example: config.addFieldValidation("score", new NumericRangeValidator(0.0, 100.0))
     
     // Processing configuration
     private int startRow = 0; // 0-based index for header row
@@ -76,7 +72,23 @@ public class ExcelConfig {
     private int flushInterval = 1000; // Periodic flushing interval for SXSSF (records)
     private boolean enableCellStyleOptimization = true; // Reuse cell styles to reduce memory
     private boolean minimizeMemoryFootprint = true; // Aggressive memory optimizations
-    
+
+    // Multi-Sheet Support
+    private boolean readAllSheets = false; // Read all sheets or just first
+    private List<String> sheetNames; // Specific sheet names to read
+    private int sheetCount = 1; // Number of sheets processed (tracked during execution)
+
+    // Caching Support
+    private boolean enableCaching = false; // Enable caching of parsed objects
+    private long cacheTTLSeconds = 3600; // Cache TTL in seconds (1 hour default)
+    private int cacheMaxSize = 1000; // Maximum cache entries
+
+    // Template Support
+    private String templatePath; // Path to Excel template file
+
+    // Style Support
+    private Object styleTemplate; // Custom style template (can be any type)
+
     public ExcelConfig() {
         // Default constructor
     }
@@ -174,24 +186,13 @@ public class ExcelConfig {
             config.globalValidationRules.add(rule);
             return this;
         }
-        
-        public Builder useStreamingParser(boolean enabled) {
-            config.useStreamingParser = enabled;
-            return this;
-        }
-        
+
+        // REMOVED: useStreamingParser - TrueStreamingSAXProcessor always uses SAX streaming
+        // REMOVED: enableDataTypeCache - TypeConverter always caches (singleton)
+        // REMOVED: enableReflectionCache - MethodHandleMapper always caches
+
         public Builder maxErrorsBeforeAbort(int maxErrors) {
             config.maxErrorsBeforeAbort = maxErrors;
-            return this;
-        }
-        
-        public Builder enableDataTypeCache(boolean enabled) {
-            config.enableDataTypeCache = enabled;
-            return this;
-        }
-        
-        public Builder enableReflectionCache(boolean enabled) {
-            config.enableReflectionCache = enabled;
             return this;
         }
         
@@ -240,21 +241,10 @@ public class ExcelConfig {
             config.maxColsForXLS = maxCols;
             return this;
         }
-        
-        public Builder enableRangeValidation(boolean enabled) {
-            config.enableRangeValidation = enabled;
-            return this;
-        }
-        
-        public Builder minValue(Double minValue) {
-            config.minValue = minValue;
-            return this;
-        }
-        
-        public Builder maxValue(Double maxValue) {
-            config.maxValue = maxValue;
-            return this;
-        }
+
+        // REMOVED: enableRangeValidation, minValue, maxValue
+        // Use field-specific validation instead:
+        // config.addFieldValidation("fieldName", new NumericRangeValidator(min, max))
         
         public Builder startRow(int startRow) {
             config.startRow = startRow;
@@ -301,7 +291,51 @@ public class ExcelConfig {
             config.jobId = jobId;
             return this;
         }
-        
+
+        // Multi-Sheet Support Builder Methods
+        public Builder readAllSheets(boolean readAllSheets) {
+            config.readAllSheets = readAllSheets;
+            return this;
+        }
+
+        public Builder sheetNames(List<String> sheetNames) {
+            config.sheetNames = sheetNames;
+            return this;
+        }
+
+        public Builder sheetCount(int sheetCount) {
+            config.sheetCount = sheetCount;
+            return this;
+        }
+
+        // Caching Support Builder Methods
+        public Builder enableCaching(boolean enableCaching) {
+            config.enableCaching = enableCaching;
+            return this;
+        }
+
+        public Builder cacheTTLSeconds(long cacheTTLSeconds) {
+            config.cacheTTLSeconds = cacheTTLSeconds;
+            return this;
+        }
+
+        public Builder cacheMaxSize(int cacheMaxSize) {
+            config.cacheMaxSize = cacheMaxSize;
+            return this;
+        }
+
+        // Template Support Builder Method
+        public Builder templatePath(String templatePath) {
+            config.templatePath = templatePath;
+            return this;
+        }
+
+        // Style Support Builder Method
+        public Builder styleTemplate(Object styleTemplate) {
+            config.styleTemplate = styleTemplate;
+            return this;
+        }
+
         public ExcelConfig build() {
             return config;
         }
@@ -375,33 +409,13 @@ public class ExcelConfig {
     public List<ValidationRule> getGlobalValidationRules() {
         return new ArrayList<>(globalValidationRules);
     }
-    
-    public boolean isUseStreamingParser() {
-        return useStreamingParser;
-    }
-    
+
+    // REMOVED getters: isUseStreamingParser, isEnableDataTypeCache, isEnableReflectionCache
+    // REMOVED getters: isEnableRangeValidation, getMinValue, getMaxValue
+    // Reason: Caching is always enabled internally, range validation moved to ValidationRule
+
     public int getMaxErrorsBeforeAbort() {
         return maxErrorsBeforeAbort;
-    }
-    
-    public boolean isEnableDataTypeCache() {
-        return enableDataTypeCache;
-    }
-    
-    public boolean isEnableReflectionCache() {
-        return enableReflectionCache;
-    }
-    
-    public boolean isEnableRangeValidation() {
-        return enableRangeValidation;
-    }
-    
-    public Double getMinValue() {
-        return minValue;
-    }
-    
-    public Double getMaxValue() {
-        return maxValue;
     }
     
     public int getStartRow() {
@@ -530,21 +544,12 @@ public class ExcelConfig {
     public void setAutoSizeColumns(boolean autoSizeColumns) {
         this.autoSizeColumns = autoSizeColumns;
     }
-    
-    public void setUseStreamingParser(boolean useStreamingParser) {
-        this.useStreamingParser = useStreamingParser;
-    }
-    
+
+    // REMOVED setters: setUseStreamingParser, setEnableDataTypeCache, setEnableReflectionCache
+    // Reason: These fields have been removed from configuration
+
     public void setMaxErrorsBeforeAbort(int maxErrorsBeforeAbort) {
         this.maxErrorsBeforeAbort = maxErrorsBeforeAbort;
-    }
-    
-    public void setEnableDataTypeCache(boolean enableDataTypeCache) {
-        this.enableDataTypeCache = enableDataTypeCache;
-    }
-    
-    public void setEnableReflectionCache(boolean enableReflectionCache) {
-        this.enableReflectionCache = enableReflectionCache;
     }
     
     // Additional methods for dynamic configuration
@@ -555,7 +560,43 @@ public class ExcelConfig {
     public void addGlobalValidation(ValidationRule rule) {
         this.globalValidationRules.add(rule);
     }
-    
+
+    // Multi-Sheet Support Getters
+    public boolean isReadAllSheets() {
+        return readAllSheets;
+    }
+
+    public List<String> getSheetNames() {
+        return sheetNames;
+    }
+
+    public int getSheetCount() {
+        return sheetCount;
+    }
+
+    // Caching Support Getters
+    public boolean isEnableCaching() {
+        return enableCaching;
+    }
+
+    public long getCacheTTLSeconds() {
+        return cacheTTLSeconds;
+    }
+
+    public int getCacheMaxSize() {
+        return cacheMaxSize;
+    }
+
+    // Template Support Getter
+    public String getTemplatePath() {
+        return templatePath;
+    }
+
+    // Style Support Getter
+    public Object getStyleTemplate() {
+        return styleTemplate;
+    }
+
     @Override
     public String toString() {
         return "ExcelConfig{" +
@@ -573,10 +614,8 @@ public class ExcelConfig {
                 ", progressReportInterval=" + progressReportInterval +
                 ", requiredFields=" + requiredFields +
                 ", uniqueFields=" + uniqueFields +
-                ", useStreamingParser=" + useStreamingParser +
                 ", maxErrorsBeforeAbort=" + maxErrorsBeforeAbort +
-                ", enableDataTypeCache=" + enableDataTypeCache +
-                ", enableReflectionCache=" + enableReflectionCache +
+                // Removed: useStreamingParser, enableDataTypeCache, enableReflectionCache (always enabled)
                 '}';
     }
 }

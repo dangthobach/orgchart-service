@@ -80,10 +80,9 @@ public class ExcelFactory {
             ExcelConfig config = ExcelConfig.builder()
                     .batchSize(1000)
                     .memoryThreshold(100)
-                    .useStreamingParser(false)
                     .enableProgressTracking(false)
                     .build();
-            
+
             return createProcessor(ProcessingStrategy.IN_MEMORY, beanClass, config);
         }
         
@@ -94,11 +93,10 @@ public class ExcelFactory {
             ExcelConfig config = ExcelConfig.builder()
                     .batchSize(5000)
                     .memoryThreshold(200)
-                    .useStreamingParser(false)
                     .enableProgressTracking(true)
                     .progressReportInterval(10000)
                     .build();
-            
+
             return createProcessor(ProcessingStrategy.XSSF, beanClass, config);
         }
         
@@ -109,13 +107,12 @@ public class ExcelFactory {
             ExcelConfig config = ExcelConfig.builder()
                     .batchSize(10000)
                     .memoryThreshold(500)
-                    .useStreamingParser(true)
                     .forceStreamingMode(true)
                     .sxssfRowAccessWindowSize(1000)
                     .enableProgressTracking(true)
                     .progressReportInterval(50000)
                     .build();
-            
+
             return createProcessor(ProcessingStrategy.SXSSF, beanClass, config);
         }
         
@@ -126,13 +123,12 @@ public class ExcelFactory {
             ExcelConfig config = ExcelConfig.builder()
                     .batchSize(50000)
                     .memoryThreshold(1000)
-                    .useStreamingParser(true)
                     .forceStreamingMode(true)
                     .enableProgressTracking(true)
                     .progressReportInterval(100000)
                     .minimizeMemoryFootprint(true)
                     .build();
-            
+
             return createProcessor(ProcessingStrategy.SAX_STREAMING, beanClass, config);
         }
         
@@ -143,13 +139,12 @@ public class ExcelFactory {
             ExcelConfig config = ExcelConfig.builder()
                     .batchSize(100)
                     .memoryThreshold(50)
-                    .useStreamingParser(true)
                     .forceStreamingMode(true)
                     .minimizeMemoryFootprint(true)
                     .disableAutoSizing(true)
                     .useSharedStrings(false)
                     .build();
-            
+
             return createProcessor(ProcessingStrategy.SAX_STREAMING, beanClass, config);
         }
         
@@ -157,16 +152,14 @@ public class ExcelFactory {
          * High-performance processor - Maximum speed
          */
         public static <T> ExcelProcessor<T> highPerformance(Class<T> beanClass) {
+            // Note: SAX streaming, reflection caching, and data type caching are always enabled
             ExcelConfig config = ExcelConfig.builder()
                     .batchSize(100000)
                     .parallelProcessing(true)
                     .threadPoolSize(Runtime.getRuntime().availableProcessors())
-                    .useStreamingParser(true)
-                    .enableReflectionCache(true)
-                    .enableDataTypeCache(true)
                     .disableAutoSizing(true)
                     .build();
-            
+
             return createProcessor(ProcessingStrategy.PARALLEL_SAX, beanClass, config);
         }
     }
@@ -208,6 +201,7 @@ public class ExcelFactory {
          * Production profile - Optimized for performance
          */
         public static ExcelConfig production() {
+            // Note: SAX streaming, reflection caching, and data type caching are always enabled
             return ExcelConfig.builder()
                     .batchSize(10000)
                     .strictValidation(false)
@@ -215,9 +209,6 @@ public class ExcelFactory {
                     .enableProgressTracking(true)
                     .progressReportInterval(50000)
                     .maxErrorsBeforeAbort(500)
-                    .useStreamingParser(true)
-                    .enableReflectionCache(true)
-                    .enableDataTypeCache(true)
                     .minimizeMemoryFootprint(true)
                     .build();
         }
@@ -226,6 +217,7 @@ public class ExcelFactory {
          * Batch processing profile - For scheduled jobs
          */
         public static ExcelConfig batch() {
+            // Note: SAX streaming is always enabled
             return ExcelConfig.builder()
                     .batchSize(50000)
                     .memoryThreshold(2000)
@@ -233,7 +225,6 @@ public class ExcelFactory {
                     .threadPoolSize(Runtime.getRuntime().availableProcessors())
                     .enableProgressTracking(true)
                     .progressReportInterval(100000)
-                    .useStreamingParser(true)
                     .forceStreamingMode(true)
                     .build();
         }

@@ -25,22 +25,21 @@ public class SAXExcelService {
         
         try {
             // Configure Excel processing with enhanced validation
+            // NOTE: Streaming always enabled in TrueStreamingSAXProcessor, caching always active
             ExcelConfig config = ExcelConfig.builder()
                 .batchSize(2000)                    // Larger batch size for SAX processing
                 .memoryThreshold(100)               // Lower memory threshold
-                .useStreamingParser(true)           // Enable SAX processing
                 .strictValidation(true)             // Enable strict validation
                 .failOnFirstError(false)            // Continue processing on errors
-                .enableProgressTracking(true)      // Track progress
-                .enableMemoryMonitoring(true)      // Monitor memory usage
-                .progressReportInterval(5000)      // Report every 5k records
-                .maxErrorsBeforeAbort(50)          // Abort after 50 errors
-                .enableRangeValidation(true)       // Enable numeric range validation
-                .minValue(0.0)                     // Minimum numeric value
-                .maxValue(999999.0)                // Maximum numeric value
-                .startRow(0)                       // Header row index
+                .enableProgressTracking(true)       // Track progress
+                .enableMemoryMonitoring(true)       // Monitor memory usage
+                .progressReportInterval(5000)       // Report every 5k records
+                .maxErrorsBeforeAbort(50)           // Abort after 50 errors
+                .startRow(0)                        // Header row index
                 .requiredFields(Set.of("name", "email"))    // Required fields
                 .uniqueFields(Set.of("email", "id"))        // Unique fields
+                // For range validation, use field-specific ValidationRule:
+                // .addFieldValidation("fieldName", new NumericRangeValidator(0.0, 999999.0))
                 .build();
             
             log.info("Starting SAX-based Excel processing for class: {}", beanClass.getSimpleName());
@@ -70,12 +69,11 @@ public class SAXExcelService {
             InputStream inputStream, Class<T> beanClass, Set<String> requiredFields, Set<String> uniqueFields) {
         
         try {
+            // NOTE: Streaming always enabled, no range validation config needed
             ExcelConfig config = ExcelConfig.builder()
-                .useStreamingParser(true)
                 .strictValidation(true)
                 .requiredFields(requiredFields)
                 .uniqueFields(uniqueFields)
-                .enableRangeValidation(false)  // Disable range validation
                 .build();
             
             log.info("Processing Excel with custom validation rules");
@@ -98,18 +96,16 @@ public class SAXExcelService {
         
         try {
             // Optimized configuration for large files
+            // NOTE: Streaming and caching always enabled
             ExcelConfig config = ExcelConfig.builder()
                 .batchSize(5000)                    // Large batch size
                 .memoryThreshold(50)                // Very low memory threshold
-                .useStreamingParser(true)           // SAX processing mandatory
                 .parallelProcessing(false)          // Disable parallel processing for memory conservation
                 .strictValidation(false)            // Relaxed validation for performance
-                .enableProgressTracking(true)      // Monitor progress
-                .enableMemoryMonitoring(true)      // Critical for large files
-                .progressReportInterval(10000)     // Report every 10k records
-                .maxErrorsBeforeAbort(100)         // Higher error threshold
-                .enableDataTypeCache(true)         // Enable all caching
-                .enableReflectionCache(true)
+                .enableProgressTracking(true)       // Monitor progress
+                .enableMemoryMonitoring(true)       // Critical for large files
+                .progressReportInterval(10000)      // Report every 10k records
+                .maxErrorsBeforeAbort(100)          // Higher error threshold
                 .build();
             
             log.info("Starting high-performance processing for large Excel file");

@@ -91,16 +91,14 @@ ExcelProcessor<ExcelRowDTO> processor =
 
 ```java
 // Tạo custom config
+// Note: SAX streaming, reflection caching, and data type caching are always enabled
 ExcelConfig customConfig = ExcelConfig.builder()
     .batchSize(5000)
     .memoryThreshold(200)
-    .useStreamingParser(true)
     .enableProgressTracking(true)
     .progressReportInterval(10000)
     .strictValidation(false)
     .maxErrorsBeforeAbort(100)
-    .enableReflectionCache(true)
-    .enableDataTypeCache(true)
     .jobId("custom-excel-job-001")
     .build();
 
@@ -168,20 +166,21 @@ processor.processStream(inputStream, batch -> {
 |--------|---------|-------------|
 | `batchSize` | 1000 | Records per batch |
 | `memoryThresholdMB` | 500 | Memory limit trigger |
-| `useStreamingParser` | true | Enable streaming mode |
 | `enableProgressTracking` | true | Progress reporting |
 | `strictValidation` | false | Strict validation mode |
 | `failOnFirstError` | false | Stop on first error |
+
+**Note:** SAX streaming is always enabled - removed `useStreamingParser()` method.
 
 ### Performance Tuning
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `enableReflectionCache` | true | Cache reflection calls |
-| `enableDataTypeCache` | true | Cache data type conversions |
 | `parallelProcessing` | true | Multi-threaded processing |
 | `threadPoolSize` | CPU cores | Thread pool size |
 | `minimizeMemoryFootprint` | true | Aggressive memory optimization |
+
+**Note:** Reflection caching and data type caching are always enabled - removed `enableReflectionCache()` and `enableDataTypeCache()` methods.
 
 ### Excel-specific Settings
 
@@ -256,7 +255,7 @@ try {
 @Test
 public void testConfigProfiles() {
     ExcelConfig prodConfig = ExcelFactory.Profiles.production();
-    assertTrue(prodConfig.isUseStreamingParser());
+    // Note: SAX streaming is always enabled, no need to test
     assertFalse(prodConfig.isStrictValidation());
 }
 
@@ -299,9 +298,9 @@ ExcelConfig devConfig = ExcelFactory.Profiles.development()
     .strictValidation(true)
     .failOnFirstError(true);
 
-// Production  
+// Production
+// Note: Reflection caching is always enabled
 ExcelConfig prodConfig = ExcelFactory.Profiles.production()
-    .enableReflectionCache(true)
     .minimizeMemoryFootprint(true);
 ```
 

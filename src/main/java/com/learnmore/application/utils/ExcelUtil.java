@@ -24,9 +24,25 @@ import com.learnmore.application.utils.mapper.ExcelColumnMapper;
 import com.learnmore.application.utils.parallel.TrueParallelBatchProcessor;
 
 /**
- * Refactored Excel utility class optimized for true streaming processing
+ * Excel utility class optimized for true streaming processing
  * Supports 1M+ records with comprehensive validation, monitoring, and error handling
- * 
+ *
+ * ⚠️ MIGRATION NOTICE:
+ * This class is being refactored to use Hexagonal Architecture.
+ * New code should use ExcelFacade instead:
+ *
+ * OLD:  List<User> users = ExcelUtil.processExcel(inputStream, User.class);
+ * NEW:  List<User> users = excelFacade.readExcel(inputStream, User.class);
+ *
+ * Benefits of new API:
+ * - Dependency injection (testable, mockable)
+ * - Cleaner API (simpler method names)
+ * - Better separation of concerns
+ * - Same performance (delegates to this class)
+ *
+ * This class will remain for backward compatibility but is no longer the recommended API.
+ * See: com.learnmore.application.excel.ExcelFacade
+ *
  * Key Features:
  * - True streaming processing for large datasets (no memory accumulation)
  * - Comprehensive validation framework
@@ -566,11 +582,8 @@ public class ExcelUtil {
             logger.debug("Added DataTypeValidator for field: {} (type: {})", columnName, fieldType.getSimpleName());
         }
         
-        // Add numeric range validation if configured
-        if (config.isEnableRangeValidation()) {
-            validationRules.add(new NumericRangeValidator(config.getMinValue(), config.getMaxValue()));
-            logger.debug("Added NumericRangeValidator (min: {}, max: {})", config.getMinValue(), config.getMaxValue());
-        }
+        // REMOVED: Global range validation config
+        // Use field-specific validation instead: config.addFieldValidation("field", new NumericRangeValidator(min, max))
         
         // Add email validation
         validationRules.add(new EmailValidator());

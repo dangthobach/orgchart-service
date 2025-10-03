@@ -36,9 +36,8 @@ public class ExcelFactoryTest {
         assertFalse(prodConfig.isFailOnFirstError());
         assertEquals(10000, prodConfig.getBatchSize());
         assertEquals(500, prodConfig.getMaxErrorsBeforeAbort());
-        assertTrue(prodConfig.isUseStreamingParser());
-        assertTrue(prodConfig.isEnableReflectionCache());
-        assertTrue(prodConfig.isEnableDataTypeCache());
+        // REMOVED assertions: isUseStreamingParser, isEnableReflectionCache, isEnableDataTypeCache
+        // These fields removed - caching always enabled, streaming always used
         
         // Test batch profile
         ExcelConfig batchConfig = ExcelFactory.Profiles.batch();
@@ -214,8 +213,7 @@ public class ExcelFactoryTest {
         ExcelConfig largeProd = ExcelConfigValidator.getRecommendedConfig(500000, "production");
         assertEquals(10000, largeProd.getBatchSize());
         assertFalse(largeProd.isStrictValidation());
-        assertTrue(largeProd.isUseStreamingParser());
-        assertTrue(largeProd.isEnableReflectionCache());
+        // REMOVED: isUseStreamingParser, isEnableReflectionCache - always enabled
         
         // Extra large file, production
         ExcelConfig extraLargeProd = ExcelConfigValidator.getRecommendedConfig(2000000, "production");

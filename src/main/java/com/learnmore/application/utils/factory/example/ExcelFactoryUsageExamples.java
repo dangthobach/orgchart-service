@@ -57,11 +57,11 @@ public class ExcelFactoryUsageExamples {
                 devConfig.isStrictValidation(), devConfig.getBatchSize());
         
         // Production environment
+        // Note: Reflection caching is always enabled
         ExcelConfig prodConfig = ExcelFactory.Profiles.production();
-        log.info("Prod config - Strict validation: {}, Batch size: {}, Caching: {}", 
-                prodConfig.isStrictValidation(), 
-                prodConfig.getBatchSize(),
-                prodConfig.isEnableReflectionCache());
+        log.info("Prod config - Strict validation: {}, Batch size: {}",
+                prodConfig.isStrictValidation(),
+                prodConfig.getBatchSize());
         
         // Batch processing
         ExcelConfig batchConfig = ExcelFactory.Profiles.batch();
@@ -78,16 +78,14 @@ public class ExcelFactoryUsageExamples {
         log.info("=== Custom Config Example ===");
         
         // Create custom configuration
+        // Note: SAX streaming, reflection caching, and data type caching are always enabled
         ExcelConfig customConfig = ExcelConfig.builder()
             .batchSize(5000)
             .memoryThreshold(200)
-            .useStreamingParser(true)
             .enableProgressTracking(true)
             .progressReportInterval(10000)
             .strictValidation(false)
             .maxErrorsBeforeAbort(100)
-            .enableReflectionCache(true)
-            .enableDataTypeCache(true)
             .jobId("custom-excel-job-001")
             .build();
         
@@ -124,10 +122,9 @@ public class ExcelFactoryUsageExamples {
                 ExcelConfig recommendedConfig = 
                     ExcelConfigValidator.getRecommendedConfig(fileSize, env);
                 
-                log.info("File size: {}, Environment: {} -> Batch: {}, Streaming: {}, Validation: {}", 
+                log.info("File size: {}, Environment: {} -> Batch: {}, Validation: {}",
                         fileSize, env,
                         recommendedConfig.getBatchSize(),
-                        recommendedConfig.isUseStreamingParser(),
                         recommendedConfig.isStrictValidation());
             }
         }

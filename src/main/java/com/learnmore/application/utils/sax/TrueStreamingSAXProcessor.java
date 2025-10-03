@@ -201,14 +201,15 @@ public class TrueStreamingSAXProcessor<T> {
                     T typedInstance = (T) currentInstance;
                     currentBatch.add(typedInstance);
                     totalProcessed.incrementAndGet();
-                    
+
                     // Process batch khi đủ size
                     if (currentBatch.size() >= config.getBatchSize()) {
                         processBatch();
                     }
-                    
-                    // Progress logging
-                    if (totalProcessed.get() % 10000 == 0) {
+
+                    // Progress tracking - respects config.enableProgressTracking and configurable interval
+                    if (config.isEnableProgressTracking() &&
+                        totalProcessed.get() % config.getProgressReportInterval() == 0) {
                         log.info("Processed {} rows in streaming mode", totalProcessed.get());
                     }
                     

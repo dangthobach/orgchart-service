@@ -146,7 +146,7 @@ public class ExcelIngestService {
                 .parallelProcessing(false) // Sequential for data integrity
                 .enableProgressTracking(true)
                 .enableMemoryMonitoring(true)
-                .useStreamingParser(false) // Use traditional processor for this phase
+                // NOTE: TrueStreamingSAXProcessor always uses streaming
                 .strictValidation(false) // Skip strict validation in ingest phase
                 .build();
         

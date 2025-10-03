@@ -287,14 +287,12 @@ public class StandaloneUserExcelPerformanceTest {
      * Create streaming configuration for Excel reading
      */
     private ExcelConfig createStreamingConfig() {
+        // NOTE: Streaming always enabled, caching always active
         return ExcelConfig.builder()
                 .batchSize(5000)                        // Larger batches for reading
                 .memoryThreshold(1024)                  // Higher memory threshold
                 .enableMemoryMonitoring(true)           // Monitor memory during processing
-                .useStreamingParser(true)               // Force streaming mode
                 .maxErrorsBeforeAbort(1000)             // Allow more errors for large datasets
-                .enableDataTypeCache(true)              // Cache type conversions
-                .enableReflectionCache(true)            // Cache reflection operations
                 .build();
     }
     
