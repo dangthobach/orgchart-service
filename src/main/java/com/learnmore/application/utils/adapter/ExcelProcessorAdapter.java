@@ -1,6 +1,6 @@
 package com.learnmore.application.utils.adapter;
 
-import com.learnmore.application.utils.ExcelUtil;
+import com.learnmore.application.excel.ExcelFacade;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.exception.ExcelProcessException;
 import com.learnmore.application.utils.feature.ExcelFeatureToggle;
@@ -22,9 +22,15 @@ import java.util.Objects;
 public class ExcelProcessorAdapter {
 
     private final ExcelFeatureToggle featureToggle;
+    private final ExcelFacade excelFacade;
+    private final ReactiveExcelUtil reactiveExcelUtil;
 
-    public ExcelProcessorAdapter(ExcelFeatureToggle featureToggle) {
+    public ExcelProcessorAdapter(ExcelFeatureToggle featureToggle, 
+                                ExcelFacade excelFacade,
+                                ReactiveExcelUtil reactiveExcelUtil) {
         this.featureToggle = featureToggle;
+        this.excelFacade = excelFacade;
+        this.reactiveExcelUtil = reactiveExcelUtil;
     }
 
     public <T> ExcelProcessingResponse<T> process(InputStream inputStream,
@@ -42,11 +48,13 @@ public class ExcelProcessorAdapter {
                 || featureToggle.shouldUseReactive(safeContext.requestId());
 
         if (!shouldUseReactive) {
-            List<T> result = ExcelUtil.processExcel(inputStream, beanClass, effectiveConfig);
+            // Use ExcelFacade instead of ExcelUtil for better architecture
+            List<T> result = excelFacade.readExcel(inputStream, beanClass, effectiveConfig);
             return ExcelProcessingResponse.sync(result, effectiveConfig);
         }
 
-        Flux<T> flux = ReactiveExcelUtil.processExcelReactive(inputStream, beanClass, effectiveConfig);
+        // Use injected ReactiveExcelUtil instance instead of static method
+        Flux<T> flux = reactiveExcelUtil.processExcelReactive(inputStream, beanClass, effectiveConfig);
         return ExcelProcessingResponse.reactive(flux, effectiveConfig);
     }
 

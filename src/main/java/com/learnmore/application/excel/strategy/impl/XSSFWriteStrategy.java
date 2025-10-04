@@ -1,13 +1,19 @@
 package com.learnmore.application.excel.strategy.impl;
 
 import com.learnmore.application.excel.strategy.WriteStrategy;
-import com.learnmore.application.utils.ExcelUtil;
+import com.learnmore.application.utils.cache.ReflectionCache;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.exception.ExcelProcessException;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Component;
 
+import java.io.FileOutputStream;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * XSSF write strategy for small Excel files
@@ -53,12 +59,9 @@ public class XSSFWriteStrategy<T> implements WriteStrategy<T> {
     /**
      * Execute write using XSSF (standard) workbook
      *
-     * This method delegates to ExcelUtil.writeToExcel() which will
-     * automatically use XSSF for small files. The automatic strategy
-     * selection in ExcelUtil is based on cell count:
-     * - < 1M cells: XSSF (this strategy)
-     * - 1M - 5M cells: SXSSF streaming
-     * - > 5M cells: CSV
+     * This method now implements the XSSF writing logic directly instead of delegating to ExcelUtil.
+     * It creates a standard XSSF workbook and writes all data to memory before saving to file.
+     * Best for small files where memory usage is not a concern.
      *
      * @param fileName Output file name (e.g., "output.xlsx")
      * @param data List of objects to write
@@ -75,11 +78,116 @@ public class XSSFWriteStrategy<T> implements WriteStrategy<T> {
                     "Consider using SXSSF or CSV strategy.", data.size());
         }
 
-        // Delegate to existing optimized implementation - ZERO performance impact
-        // ExcelUtil.writeToExcel() will automatically select XSSF for small files
-        ExcelUtil.writeToExcel(fileName, data, 0, 0, config);
-
-        log.info("XSSFWriteStrategy completed: {} records written to {}", data.size(), fileName);
+        try {
+            // Get reflection cache for field mapping
+            ReflectionCache reflectionCache = ReflectionCache.getInstance();
+            @SuppressWarnings("unchecked")
+            Class<T> beanClass = (Class<T>) data.get(0).getClass();
+            
+            // Create XSSF workbook
+            try (XSSFWorkbook workbook = new XSSFWorkbook();
+                 FileOutputStream fos = new FileOutputStream(fileName)) {
+                
+                // Create sheet
+                Sheet sheet = workbook.createSheet("Sheet1");
+                
+                // Get field mapping from reflection cache
+                ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
+                List<String> columnNames = new ArrayList<>(excelFields.keySet());
+                
+                // Create header row
+                Row headerRow = sheet.createRow(0);
+                CellStyle headerStyle = createHeaderStyle(workbook);
+                for (int i = 0; i < columnNames.size(); i++) {
+                    Cell cell = headerRow.createCell(i);
+                    cell.setCellValue(columnNames.get(i));
+                    cell.setCellStyle(headerStyle);
+                }
+                
+                // Write data rows
+                int currentRow = 1;
+                for (T item : data) {
+                    Row row = sheet.createRow(currentRow++);
+                    writeRowData(row, item, columnNames, excelFields, 0);
+                }
+                
+                // Auto-size columns if enabled
+                if (!config.isDisableAutoSizing()) {
+                    for (int i = 0; i < columnNames.size(); i++) {
+                        sheet.autoSizeColumn(i);
+                    }
+                }
+                
+                // Write workbook to file
+                workbook.write(fos);
+            }
+            
+            log.info("XSSFWriteStrategy completed: {} records written to {}", data.size(), fileName);
+            
+        } catch (Exception e) {
+            log.error("XSSFWriteStrategy failed for file: {}", fileName, e);
+            throw new ExcelProcessException("Failed to write Excel file with XSSF strategy", e);
+        }
+    }
+    
+    /**
+     * Create header style for Excel cells
+     */
+    private CellStyle createHeaderStyle(Workbook workbook) {
+        CellStyle headerStyle = workbook.createCellStyle();
+        Font headerFont = workbook.createFont();
+        headerFont.setBold(true);
+        headerStyle.setFont(headerFont);
+        return headerStyle;
+    }
+    
+    /**
+     * Write row data to Excel row
+     */
+    private void writeRowData(Row row, T item, List<String> columnNames, 
+                             ConcurrentMap<String, Field> excelFields, int columnStart) {
+        for (int i = 0; i < columnNames.size(); i++) {
+            String columnName = columnNames.get(i);
+            Field field = excelFields.get(columnName);
+            
+            if (field != null) {
+                try {
+                    Object value = field.get(item);
+                    Cell cell = row.createCell(columnStart + i);
+                    setCellValue(cell, value);
+                } catch (IllegalAccessException e) {
+                    log.warn("Failed to access field {} for column {}", field.getName(), columnName);
+                }
+            }
+        }
+    }
+    
+    /**
+     * Set cell value with proper type handling
+     */
+    private void setCellValue(Cell cell, Object value) {
+        if (value == null) {
+            cell.setCellValue("");
+            return;
+        }
+        
+        if (value instanceof String) {
+            cell.setCellValue((String) value);
+        } else if (value instanceof Integer) {
+            cell.setCellValue((Integer) value);
+        } else if (value instanceof Long) {
+            cell.setCellValue((Long) value);
+        } else if (value instanceof Double) {
+            cell.setCellValue((Double) value);
+        } else if (value instanceof Float) {
+            cell.setCellValue((Float) value);
+        } else if (value instanceof Boolean) {
+            cell.setCellValue((Boolean) value);
+        } else if (value instanceof java.util.Date) {
+            cell.setCellValue((java.util.Date) value);
+        } else {
+            cell.setCellValue(value.toString());
+        }
     }
 
     /**

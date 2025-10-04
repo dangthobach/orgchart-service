@@ -1,13 +1,18 @@
 package com.learnmore.application.excel.strategy.impl;
 
 import com.learnmore.application.excel.strategy.WriteStrategy;
-import com.learnmore.application.utils.ExcelUtil;
+import com.learnmore.application.utils.cache.ReflectionCache;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.exception.ExcelProcessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.io.FileWriter;
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ConcurrentMap;
 
 /**
  * CSV write strategy for very large files
@@ -64,12 +69,9 @@ public class CSVWriteStrategy<T> implements WriteStrategy<T> {
     /**
      * Execute write using CSV format
      *
-     * This method delegates to ExcelUtil.writeToExcel() which will
-     * automatically convert to CSV for very large files. The automatic
-     * strategy selection in ExcelUtil is based on cell count:
-     * - < 1M cells: XSSF
-     * - 1M - 5M cells: SXSSF streaming
-     * - > 5M cells: CSV (this strategy)
+     * This method now implements the CSV writing logic directly instead of delegating to ExcelUtil.
+     * It creates a CSV file with direct text I/O for maximum performance with large datasets.
+     * CSV is 10x+ faster than Excel formats and uses minimal memory.
      *
      * CSV writing details:
      * - Direct text I/O (no XML parsing)
@@ -98,15 +100,78 @@ public class CSVWriteStrategy<T> implements WriteStrategy<T> {
                      data.size());
         }
 
-        // Log CSV conversion
-        log.info("Using CSV format for large dataset: {} records", data.size());
+        // Convert file extension to .csv
+        String csvFileName = fileName.replaceAll("\\.(xlsx|xls)$", ".csv");
+        log.info("Converting Excel to CSV format: {} -> {} ({} records)", fileName, csvFileName, data.size());
 
-        // Delegate to existing optimized implementation - ZERO performance impact
-        // ExcelUtil.writeToExcel() will automatically convert to CSV for large files
-        // and rename the output file from .xlsx to .csv
-        ExcelUtil.writeToExcel(fileName, data, 0, 0, config);
-
-        log.info("CSVWriteStrategy completed: {} records written (CSV format)", data.size());
+        try {
+            // Get reflection cache for field mapping
+            ReflectionCache reflectionCache = ReflectionCache.getInstance();
+            @SuppressWarnings("unchecked")
+            Class<T> beanClass = (Class<T>) data.get(0).getClass();
+            
+            // Get field mapping from reflection cache
+            ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
+            List<String> columnNames = new ArrayList<>(excelFields.keySet());
+            
+            // Write CSV file with streaming
+            try (FileWriter writer = new FileWriter(csvFileName)) {
+                
+                // Write header row
+                writeCSVRow(writer, columnNames);
+                
+                // Write data rows
+                for (T item : data) {
+                    List<String> rowValues = new ArrayList<>();
+                    for (String columnName : columnNames) {
+                        Field field = excelFields.get(columnName);
+                        if (field != null) {
+                            try {
+                                Object value = field.get(item);
+                                rowValues.add(value != null ? value.toString() : "");
+                            } catch (IllegalAccessException e) {
+                                log.warn("Failed to access field {} for column {}", field.getName(), columnName);
+                                rowValues.add("");
+                            }
+                        } else {
+                            rowValues.add("");
+                        }
+                    }
+                    writeCSVRow(writer, rowValues);
+                }
+            }
+            
+            log.info("CSVWriteStrategy completed: {} records written to {} (CSV format)", data.size(), csvFileName);
+            
+        } catch (IOException e) {
+            log.error("CSVWriteStrategy failed for file: {}", csvFileName, e);
+            throw new ExcelProcessException("Failed to write CSV file", e);
+        } catch (Exception e) {
+            log.error("CSVWriteStrategy failed for file: {}", csvFileName, e);
+            throw new ExcelProcessException("Failed to write CSV file with CSV strategy", e);
+        }
+    }
+    
+    /**
+     * Write a CSV row to the file writer
+     */
+    private void writeCSVRow(FileWriter writer, List<String> values) throws IOException {
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                writer.write(",");
+            }
+            
+            String value = values.get(i);
+            // Escape CSV values that contain commas, quotes, or newlines
+            if (value != null && (value.contains(",") || value.contains("\"") || value.contains("\n"))) {
+                writer.write("\"");
+                writer.write(value.replace("\"", "\"\"")); // Escape quotes
+                writer.write("\"");
+            } else {
+                writer.write(value != null ? value : "");
+            }
+        }
+        writer.write("\n");
     }
 
     /**

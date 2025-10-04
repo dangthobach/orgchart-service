@@ -1,14 +1,15 @@
 package com.learnmore.application.excel.strategy.impl;
 
 import com.learnmore.application.excel.strategy.ReadStrategy;
-import com.learnmore.application.utils.ExcelUtil;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.exception.ExcelProcessException;
 import com.learnmore.application.utils.sax.TrueStreamingSAXProcessor;
+import com.learnmore.application.utils.validation.ValidationRule;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -46,8 +47,8 @@ public class StreamingReadStrategy<T> implements ReadStrategy<T> {
     /**
      * Execute streaming read using SAX processing
      *
-     * This method delegates directly to ExcelUtil.processExcelTrueStreaming()
-     * which provides the optimized implementation with:
+     * This method now implements the logic directly instead of delegating to ExcelUtil.
+     * It provides the optimized implementation with:
      * - True streaming SAX parsing (no DOM)
      * - MethodHandle optimization (5x faster than reflection)
      * - Batch processing with configurable batch size
@@ -70,26 +71,32 @@ public class StreamingReadStrategy<T> implements ReadStrategy<T> {
     ) throws ExcelProcessException {
         log.debug("Executing StreamingReadStrategy for class: {}", beanClass.getSimpleName());
 
-        // Delegate to existing optimized implementation - ZERO performance impact
-        // This preserves all optimizations:
-        // - SAX streaming parsing
-        // - MethodHandle optimization
-        // - Batch processing
-        // - Memory monitoring
-        // - Progress tracking
-        TrueStreamingSAXProcessor.ProcessingResult result = ExcelUtil.processExcelTrueStreaming(
-            inputStream,
-            beanClass,
-            config,
-            batchProcessor
-        );
+        try {
+            // Create validation rules (empty for now, can be extended)
+            List<ValidationRule> validationRules = new ArrayList<>();
+            
+            // Create TrueStreamingSAXProcessor with direct implementation
+            TrueStreamingSAXProcessor<T> processor = new TrueStreamingSAXProcessor<>(
+                beanClass,
+                config,
+                validationRules,
+                batchProcessor
+            );
+            
+            // Process Excel with true streaming
+            TrueStreamingSAXProcessor.ProcessingResult result = processor.processExcelStreamTrue(inputStream);
+            
+            log.info("StreamingReadStrategy completed: {} records in {} ms ({} rec/sec)",
+                    result.getProcessedRecords(),
+                    result.getProcessingTimeMs(),
+                    result.getRecordsPerSecond());
 
-        log.info("StreamingReadStrategy completed: {} records in {} ms ({} rec/sec)",
-                result.getProcessedRecords(),
-                result.getProcessingTimeMs(),
-                result.getRecordsPerSecond());
-
-        return result;
+            return result;
+            
+        } catch (Exception e) {
+            log.error("StreamingReadStrategy failed for class: {}", beanClass.getSimpleName(), e);
+            throw new ExcelProcessException("Failed to process Excel file with streaming strategy", e);
+        }
     }
 
     /**

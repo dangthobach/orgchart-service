@@ -1,6 +1,6 @@
 package com.learnmore.application.service;
 
-import com.learnmore.application.utils.ExcelUtil;
+import com.learnmore.application.excel.ExcelFacade;
 import com.learnmore.application.utils.adapter.ExcelProcessorAdapter;
 import com.learnmore.application.utils.adapter.ExcelProcessorAdapter.ExcelProcessingResponse;
 import com.learnmore.application.utils.adapter.ExcelProcessorAdapter.ProcessingContext;
@@ -22,29 +22,35 @@ import java.util.List;
 public class ExcelProcessingService {
 
     private final ExcelProcessorAdapter adapter;
+    private final ExcelFacade excelFacade;
+    private final ReactiveExcelUtil reactiveExcelUtil;
 
-    public ExcelProcessingService(ExcelProcessorAdapter adapter) {
+    public ExcelProcessingService(ExcelProcessorAdapter adapter, 
+                                 ExcelFacade excelFacade,
+                                 ReactiveExcelUtil reactiveExcelUtil) {
         this.adapter = adapter;
+        this.excelFacade = excelFacade;
+        this.reactiveExcelUtil = reactiveExcelUtil;
     }
 
     public <T> List<T> processExcelTraditional(InputStream inputStream, Class<T> beanClass) throws ExcelProcessException {
-        return ExcelUtil.processExcel(inputStream, beanClass);
+        return excelFacade.readExcel(inputStream, beanClass);
     }
 
     public <T> List<T> processExcelTraditional(InputStream inputStream,
                                                Class<T> beanClass,
                                                ExcelConfig config) throws ExcelProcessException {
-        return ExcelUtil.processExcel(inputStream, beanClass, config);
+        return excelFacade.readExcel(inputStream, beanClass, config);
     }
 
     public <T> Flux<T> processExcelReactive(InputStream inputStream, Class<T> beanClass) {
-        return ReactiveExcelUtil.processExcelReactive(inputStream, beanClass);
+        return reactiveExcelUtil.processExcelReactive(inputStream, beanClass);
     }
 
     public <T> Flux<T> processExcelReactive(InputStream inputStream,
                                             Class<T> beanClass,
                                             ExcelConfig config) {
-        return ReactiveExcelUtil.processExcelReactive(inputStream, beanClass, config);
+        return reactiveExcelUtil.processExcelReactive(inputStream, beanClass, config);
     }
 
     public <T> ExcelProcessingResponse<T> processExcelHybrid(InputStream inputStream,

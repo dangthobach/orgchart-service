@@ -1,15 +1,19 @@
 package com.learnmore.application.excel.strategy.impl;
 
 import com.learnmore.application.excel.strategy.ReadStrategy;
-import com.learnmore.application.utils.ExcelUtil;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.exception.ExcelProcessException;
 import com.learnmore.application.utils.sax.TrueStreamingSAXProcessor;
+import com.learnmore.application.utils.validation.ValidationRule;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 
 /**
@@ -50,10 +54,10 @@ public class ParallelReadStrategy<T> implements ReadStrategy<T> {
     /**
      * Execute parallel read using SAX processing with parallel batch callbacks
      *
-     * This method delegates to ExcelUtil.processExcelTrueStreaming() which:
+     * This method now implements the logic directly with parallel batch processing:
      * - Reads Excel file sequentially (SAX parsing must be sequential)
-     * - Calls batch processor for each batch
-     * - Batch processor can parallelize the processing
+     * - Creates parallel batch processor using ExecutorService
+     * - Processes batches concurrently for better performance
      *
      * Example parallel batch processor:
      * <pre>
@@ -88,22 +92,50 @@ public class ParallelReadStrategy<T> implements ReadStrategy<T> {
                     "Consider using StreamingReadStrategy instead.");
         }
 
-        // Delegate to existing optimized implementation - ZERO performance impact
-        // The SAX parsing itself is single-threaded (must be sequential),
-        // but the batch processor can parallelize the processing
-        TrueStreamingSAXProcessor.ProcessingResult result = ExcelUtil.processExcelTrueStreaming(
-            inputStream,
-            beanClass,
-            config,
-            batchProcessor
-        );
+        try {
+            // Create validation rules (empty for now, can be extended)
+            List<ValidationRule> validationRules = new ArrayList<>();
+            
+            // Create parallel batch processor using ExecutorService
+            ExecutorService executorService = Executors.newFixedThreadPool(
+                Runtime.getRuntime().availableProcessors()
+            );
+            
+            Consumer<List<T>> parallelBatchProcessor = batch -> {
+                CompletableFuture.runAsync(() -> {
+                    try {
+                        batchProcessor.accept(batch);
+                    } catch (Exception e) {
+                        log.error("Error processing batch in parallel", e);
+                    }
+                }, executorService);
+            };
+            
+            // Create TrueStreamingSAXProcessor with parallel batch processing
+            TrueStreamingSAXProcessor<T> processor = new TrueStreamingSAXProcessor<>(
+                beanClass,
+                config,
+                validationRules,
+                parallelBatchProcessor
+            );
+            
+            // Process Excel with true streaming and parallel batch processing
+            TrueStreamingSAXProcessor.ProcessingResult result = processor.processExcelStreamTrue(inputStream);
+            
+            // Shutdown executor service
+            executorService.shutdown();
+            
+            log.info("ParallelReadStrategy completed: {} records in {} ms ({} rec/sec)",
+                    result.getProcessedRecords(),
+                    result.getProcessingTimeMs(),
+                    result.getRecordsPerSecond());
 
-        log.info("ParallelReadStrategy completed: {} records in {} ms ({} rec/sec)",
-                result.getProcessedRecords(),
-                result.getProcessingTimeMs(),
-                result.getRecordsPerSecond());
-
-        return result;
+            return result;
+            
+        } catch (Exception e) {
+            log.error("ParallelReadStrategy failed for class: {}", beanClass.getSimpleName(), e);
+            throw new ExcelProcessException("Failed to process Excel file with parallel strategy", e);
+        }
     }
 
     /**

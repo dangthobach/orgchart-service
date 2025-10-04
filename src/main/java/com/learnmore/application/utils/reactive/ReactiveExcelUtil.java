@@ -1,10 +1,12 @@
 package com.learnmore.application.utils.reactive;
 
-import com.learnmore.application.utils.ExcelUtil;
+import com.learnmore.application.excel.ExcelFacade;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.exception.ExcelProcessException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
@@ -18,31 +20,35 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 
 /**
- * Reactive facade for {@link ExcelUtil} that enables non-blocking, backpressure-aware processing
- * without modifying the existing stable implementation. Each method wraps the true streaming
- * processor and exposes a Reactor {@link Flux} or {@link Mono} for easy integration with
- * WebFlux/R2DBC stacks.
+ * Reactive facade for Excel processing that enables non-blocking, backpressure-aware processing
+ * using the new ExcelFacade architecture. Each method wraps the true streaming processor and 
+ * exposes a Reactor {@link Flux} or {@link Mono} for easy integration with WebFlux/R2DBC stacks.
  */
-public final class ReactiveExcelUtil {
+@Component
+public class ReactiveExcelUtil {
 
     private static final Logger logger = LoggerFactory.getLogger(ReactiveExcelUtil.class);
+    
+    private final ExcelFacade excelFacade;
 
-    private ReactiveExcelUtil() {
+    @Autowired
+    public ReactiveExcelUtil(ExcelFacade excelFacade) {
+        this.excelFacade = excelFacade;
     }
 
     /**
      * Process an Excel stream reactively using the default configuration.
      */
-    public static <T> Flux<T> processExcelReactive(InputStream inputStream, Class<T> beanClass) {
+    public <T> Flux<T> processExcelReactive(InputStream inputStream, Class<T> beanClass) {
         return processExcelReactive(inputStream, beanClass, defaultConfig());
     }
 
     /**
      * Process an Excel stream reactively while honouring the provided configuration. The underlying
-     * processing remains exactly the same as {@link ExcelUtil#processExcelTrueStreaming}, ensuring no
-     * behaviour change for existing synchronous callers.
+     * processing now uses ExcelFacade instead of ExcelUtil, providing better architecture and
+     * dependency injection support.
      */
-    public static <T> Flux<T> processExcelReactive(InputStream inputStream,
+    public <T> Flux<T> processExcelReactive(InputStream inputStream,
                                                    Class<T> beanClass,
                                                    ExcelConfig config) {
         Objects.requireNonNull(inputStream, "inputStream must not be null");
@@ -66,7 +72,7 @@ public final class ReactiveExcelUtil {
      * Process an Excel stream reactively and emit buffered batches. Useful when downstream prefers
      * batch semantics (e.g. database writers) while still benefiting from reactive backpressure.
      */
-    public static <T> Flux<List<T>> processExcelReactiveBatched(InputStream inputStream,
+    public <T> Flux<List<T>> processExcelReactiveBatched(InputStream inputStream,
                                                                 Class<T> beanClass,
                                                                 ExcelConfig config,
                                                                 int batchSize) {
@@ -79,7 +85,7 @@ public final class ReactiveExcelUtil {
      * Bridge reactive processing back to a blocking list for callers that expect the legacy
      * synchronous contract. This method should be used sparingly as it blocks the calling thread.
      */
-    public static <T> List<T> processExcelReactiveToList(InputStream inputStream,
+    public <T> List<T> processExcelReactiveToList(InputStream inputStream,
                                                          Class<T> beanClass,
                                                          ExcelConfig config) {
         return processExcelReactive(inputStream, beanClass, config)
@@ -92,7 +98,7 @@ public final class ReactiveExcelUtil {
      * Process an Excel stream reactively and invoke a custom batch consumer while still returning a
      * signal that completes once processing finishes.
      */
-    public static <T> Mono<Void> processExcelReactive(InputStream inputStream,
+    public <T> Mono<Void> processExcelReactive(InputStream inputStream,
                                                       Class<T> beanClass,
                                                       ExcelConfig config,
                                                       Consumer<List<T>> batchConsumer) {
@@ -103,7 +109,7 @@ public final class ReactiveExcelUtil {
                 .then();
     }
 
-    private static <T> void doProcessReactive(InputStream inputStream,
+    private <T> void doProcessReactive(InputStream inputStream,
                                               Class<T> beanClass,
                                               ExcelConfig config,
                                               FluxSink<T> sink) {
@@ -117,7 +123,8 @@ public final class ReactiveExcelUtil {
         };
 
         try {
-            ExcelUtil.processExcelTrueStreaming(inputStream, beanClass, config, emitter);
+            // Use ExcelFacade instead of ExcelUtil for better architecture
+            excelFacade.readExcel(inputStream, beanClass, config, emitter);
             sink.complete();
         } catch (ExcelProcessException ex) {
             sink.error(ex);
@@ -128,7 +135,7 @@ public final class ReactiveExcelUtil {
         }
     }
 
-    private static void closeQuietly(InputStream inputStream) {
+    private void closeQuietly(InputStream inputStream) {
         if (inputStream == null) {
             return;
         }
@@ -139,7 +146,7 @@ public final class ReactiveExcelUtil {
         }
     }
 
-    private static ExcelConfig defaultConfig() {
+    private ExcelConfig defaultConfig() {
         return ExcelConfig.builder().build();
     }
 }

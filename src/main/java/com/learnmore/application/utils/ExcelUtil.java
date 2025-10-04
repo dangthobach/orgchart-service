@@ -27,30 +27,38 @@ import com.learnmore.application.utils.parallel.TrueParallelBatchProcessor;
  * Excel utility class optimized for true streaming processing
  * Supports 1M+ records with comprehensive validation, monitoring, and error handling
  *
- * ⚠️ MIGRATION NOTICE:
- * This class is being refactored to use Hexagonal Architecture.
- * New code should use ExcelFacade instead:
+ * @deprecated Since version 1.5.0, replaced by {@link com.learnmore.application.excel.ExcelFacade}.
+ *             This class will be removed in version 2.0.0.
  *
- * OLD:  List<User> users = ExcelUtil.processExcel(inputStream, User.class);
- * NEW:  List<User> users = excelFacade.readExcel(inputStream, User.class);
+ * <p><b>Migration Guide:</b></p>
+ * <pre>
+ * // OLD WAY (ExcelUtil):
+ * List<User> users = ExcelUtil.processExcel(inputStream, User.class);
+ * ExcelUtil.writeToExcel("output.xlsx", users, 0, 0, config);
  *
- * Benefits of new API:
- * - Dependency injection (testable, mockable)
- * - Cleaner API (simpler method names)
- * - Better separation of concerns
- * - Same performance (delegates to this class)
+ * // NEW WAY (ExcelFacade):
+ * &#64;Autowired
+ * private ExcelFacade excelFacade;
+ * List<User> users = excelFacade.readExcel(inputStream, User.class);
+ * excelFacade.writeExcel("output.xlsx", users);
+ * </pre>
  *
- * This class will remain for backward compatibility but is no longer the recommended API.
- * See: com.learnmore.application.excel.ExcelFacade
+ * <p>Benefits of new API:</p>
+ * <ul>
+ *   <li>Dependency injection (testable, mockable)</li>
+ *   <li>Cleaner API (simpler method names)</li>
+ *   <li>Better separation of concerns</li>
+ *   <li>Strategy pattern for optimal performance</li>
+ *   <li>Same performance (uses optimized implementations)</li>
+ * </ul>
  *
- * Key Features:
- * - True streaming processing for large datasets (no memory accumulation)
- * - Comprehensive validation framework
- * - Memory monitoring and optimization
- * - Advanced type conversion support
- * - Proper resource management
- * - Production-ready performance
+ * <p>See {@link com.learnmore.application.excel.ExcelFacade} for complete API documentation.</p>
+ *
+ * @see com.learnmore.application.excel.ExcelFacade
+ * @see com.learnmore.application.excel.builder.ExcelReaderBuilder
+ * @see com.learnmore.application.excel.builder.ExcelWriterBuilder
  */
+@Deprecated(since = "1.5.0", forRemoval = true)
 public class ExcelUtil {
     
     private static final Logger logger = LoggerFactory.getLogger(ExcelUtil.class);
@@ -75,7 +83,10 @@ public class ExcelUtil {
     /**
      * Main entry point for Excel processing - uses true streaming
      * Backward compatible method that delegates to processExcelTrueStreaming
+     * 
+     * @deprecated Use {@link com.learnmore.application.excel.ExcelFacade#readExcel(InputStream, Class)} instead
      */
+    @Deprecated(since = "1.5.0", forRemoval = true)
     public static <T> List<T> processExcel(InputStream inputStream, Class<T> beanClass) throws ExcelProcessException {
         return processExcel(inputStream, beanClass, DEFAULT_CONFIG);
     }
@@ -83,7 +94,10 @@ public class ExcelUtil {
     /**
      * Process Excel file with configuration - delegates to true streaming
      * Collects results for backward compatibility
+     * 
+     * @deprecated Use {@link com.learnmore.application.excel.ExcelFacade#readExcel(InputStream, Class, ExcelConfig)} instead
      */
+    @Deprecated(since = "1.5.0", forRemoval = true)
     public static <T> List<T> processExcel(InputStream inputStream, Class<T> beanClass, ExcelConfig config) 
             throws ExcelProcessException {
         
@@ -399,7 +413,10 @@ public class ExcelUtil {
     /**
      * Write data to Excel file with full configuration - ENHANCED intelligent strategy selection
      * Based on comprehensive benchmark analysis showing POI operations are the real bottleneck
+     * 
+     * @deprecated Use {@link com.learnmore.application.excel.ExcelFacade#writeExcel(String, List)} instead
      */
+    @Deprecated(since = "1.5.0", forRemoval = true)
     public static <T> void writeToExcel(String fileName, List<T> data, Integer rowStart, Integer columnStart, ExcelConfig config) 
             throws ExcelProcessException {
         
