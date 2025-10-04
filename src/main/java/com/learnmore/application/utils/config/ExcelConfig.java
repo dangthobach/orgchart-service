@@ -56,6 +56,9 @@ public class ExcelConfig {
     private boolean allowXLSFormat = false; // Mặc định không cho phép .xls (giới hạn 65k hàng)
     private int maxRowsForXLS = 65_535; // Giới hạn .xls
     private int maxColsForXLS = 256; // Giới hạn cột .xls
+
+    // Row count validation - PERFORMANCE OPTIMIZED
+    private int maxRows = 0; // Maximum rows to process (0 = no limit). Validated during streaming.
     
     // Range validation - REMOVED: Use field-specific ValidationRule instead
     // Example: config.addFieldValidation("score", new NumericRangeValidator(0.0, 100.0))
@@ -239,6 +242,11 @@ public class ExcelConfig {
         
         public Builder maxColsForXLS(int maxCols) {
             config.maxColsForXLS = maxCols;
+            return this;
+        }
+
+        public Builder maxRows(int maxRows) {
+            config.maxRows = maxRows;
             return this;
         }
 
@@ -487,7 +495,11 @@ public class ExcelConfig {
     public int getMaxColsForXLS() {
         return maxColsForXLS;
     }
-    
+
+    public int getMaxRows() {
+        return maxRows;
+    }
+
     public String getJobId() {
         return jobId;
     }

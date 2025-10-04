@@ -124,7 +124,7 @@ public class ReactiveExcelUtil {
 
         try {
             // Use ExcelFacade instead of ExcelUtil for better architecture
-            excelFacade.readExcel(inputStream, beanClass, config, emitter);
+            excelFacade.readExcelWithConfig(inputStream, beanClass, config, emitter);
             sink.complete();
         } catch (ExcelProcessException ex) {
             sink.error(ex);

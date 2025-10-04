@@ -1,14 +1,14 @@
 spring:
   application:
     name: orgchart-service-test
-  
+
   # Test database configuration (H2 in-memory for performance testing)
   datasource:
     url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
     driver-class-name: org.h2.Driver
     username: sa
-    password: 
-  
+    password:
+
   # JPA configuration for test
   jpa:
     hibernate:
@@ -23,6 +23,11 @@ spring:
         jdbc:
           batch_size: 1000
           batch_versioned_data: true
+
+  # Disable data.sql initialization for tests
+  sql:
+    init:
+      mode: never
 
 # Logging configuration for performance tests  
 logging:

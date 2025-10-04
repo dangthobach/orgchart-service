@@ -49,7 +49,8 @@ public class ExcelProcessorAdapter {
 
         if (!shouldUseReactive) {
             // Use ExcelFacade instead of ExcelUtil for better architecture
-            List<T> result = excelFacade.readExcel(inputStream, beanClass, effectiveConfig);
+            List<T> result = new java.util.ArrayList<>();
+            excelFacade.readExcelWithConfig(inputStream, beanClass, effectiveConfig, result::addAll);
             return ExcelProcessingResponse.sync(result, effectiveConfig);
         }
 

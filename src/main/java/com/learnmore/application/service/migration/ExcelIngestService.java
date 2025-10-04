@@ -2,7 +2,7 @@ package com.learnmore.application.service.migration;
 
 import com.learnmore.application.dto.migration.ExcelRowDTO;
 import com.learnmore.application.dto.migration.MigrationResultDTO;
-import com.learnmore.application.utils.ExcelUtil;
+import com.learnmore.application.excel.ExcelFacade;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.validation.ExcelDimensionValidator;
 import com.learnmore.domain.migration.MigrationJob;
@@ -33,9 +33,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 @RequiredArgsConstructor
 @Slf4j
 public class ExcelIngestService {
-    
+
     private final MigrationJobRepository migrationJobRepository;
     private final StagingRawRepository stagingRawRepository;
+    private final ExcelFacade excelFacade;
     
     /**
      * Bắt đầu quá trình ingest Excel file
@@ -67,49 +68,43 @@ public class ExcelIngestService {
         migrationJobRepository.save(migrationJob);
         
         try {
-            // Tạo một copy của stream để validation và processing riêng biệt
-            byte[] streamData = inputStream.readAllBytes();
-            
-            // Validate số lượng bản ghi nếu có giới hạn (sử dụng copy stream)
-            int actualDataRows = 0;
-            if (maxRows > 0) {
-                try (java.io.ByteArrayInputStream validationStream = new java.io.ByteArrayInputStream(streamData)) {
-                    actualDataRows = ExcelDimensionValidator.validateRowCount(
-                        ExcelDimensionValidator.wrapWithBuffer(validationStream), maxRows, 1); // startRow = 1 (skip header)
-                    log.info("Dimension validation passed. Actual data rows: {}, Max allowed: {}", actualDataRows, maxRows);
-                }
-            }
-            
-            // Thực hiện ingest với stream mới
-            try (java.io.ByteArrayInputStream processingStream = new java.io.ByteArrayInputStream(streamData)) {
-                IngestResult result = performIngest(processingStream, jobId);
-                
-                // Cập nhật job status
-                migrationJob.setStatus("INGESTING_COMPLETED");
-                migrationJob.setCurrentPhase("INGEST_COMPLETED");
-                migrationJob.setTotalRows(result.getTotalRows());
-                migrationJob.setProcessedRows(result.getProcessedRows());
-                migrationJob.setProgressPercent(100.0);
-                migrationJob.setProcessingTimeMs(result.getProcessingTimeMs());
-                
-                migrationJobRepository.save(migrationJob);
-                
-                log.info("Excel ingest completed successfully. JobId: {}, ProcessedRows: {}", 
-                        jobId, result.getProcessedRows());
-                
-                return MigrationResultDTO.builder()
-                        .jobId(jobId)
-                        .status("INGESTING_COMPLETED")
-                        .filename(filename)
-                        .totalRows(result.getTotalRows())
-                        .processedRows(result.getProcessedRows())
-                        .currentPhase("INGEST_COMPLETED")
-                        .progressPercent(100.0)
-                        .startedAt(migrationJob.getStartedAt())
-                        .ingestTimeMs(result.getProcessingTimeMs())
-                        .build();
-            }
-                    
+            // ✅ PERFORMANCE FIX: Validate during streaming (NO separate validation step)
+            // BEFORE ATTEMPT 1: byte[] streamData = inputStream.readAllBytes(); // ❌ 500MB-2GB!
+            // BEFORE ATTEMPT 2: inputStream.mark(Integer.MAX_VALUE); // ❌ Still buffers 2GB!
+            // AFTER FIX: Validate row count DURING streaming processing (single pass)
+
+            // NOTE: maxRows validation is now handled by TrueStreamingSAXProcessor
+            // during streaming - it will throw exception if maxRows is exceeded
+            // This eliminates the need for separate validation pass
+
+            // ✅ OPTIMIZED: Direct streaming processing with inline validation
+            IngestResult result = performIngest(inputStream, jobId, maxRows);
+
+            // Cập nhật job status
+            migrationJob.setStatus("INGESTING_COMPLETED");
+            migrationJob.setCurrentPhase("INGEST_COMPLETED");
+            migrationJob.setTotalRows(result.getTotalRows());
+            migrationJob.setProcessedRows(result.getProcessedRows());
+            migrationJob.setProgressPercent(100.0);
+            migrationJob.setProcessingTimeMs(result.getProcessingTimeMs());
+
+            migrationJobRepository.save(migrationJob);
+
+            log.info("Excel ingest completed successfully. JobId: {}, ProcessedRows: {}",
+                    jobId, result.getProcessedRows());
+
+            return MigrationResultDTO.builder()
+                    .jobId(jobId)
+                    .status("INGESTING_COMPLETED")
+                    .filename(filename)
+                    .totalRows(result.getTotalRows())
+                    .processedRows(result.getProcessedRows())
+                    .currentPhase("INGEST_COMPLETED")
+                    .progressPercent(100.0)
+                    .startedAt(migrationJob.getStartedAt())
+                    .ingestTimeMs(result.getProcessingTimeMs())
+                    .build();
+
         } catch (Exception e) {
             log.error("Excel ingest failed. JobId: {}, Error: {}", jobId, e.getMessage(), e);
             
@@ -131,45 +126,60 @@ public class ExcelIngestService {
     }
     
     /**
-     * Thực hiện quá trình ingest sử dụng ExcelUtil streaming
+     * Thực hiện quá trình ingest sử dụng ExcelFacade streaming
+     *
+     * MIGRATION NOTE: Migrated from ExcelUtil.processExcelTrueStreaming() to ExcelFacade.readExcel()
+     * - ZERO performance impact: ExcelFacade delegates to the same optimized ExcelUtil implementation
+     * - Better maintainability: Uses dependency injection instead of static methods
+     * - Future-proof: ExcelUtil will be removed in version 2.0.0
+     *
+     * PERFORMANCE FIX: Inline maxRows validation during streaming
+     * - NO separate validation pass = NO stream buffering
+     * - Validates row count DURING processing via rowCountChecker
+     * - Throws exception immediately if maxRows exceeded
+     *
+     * @param inputStream Excel file input stream
+     * @param jobId Migration job ID
+     * @param maxRows Maximum rows allowed (0 = no limit)
      */
-    private IngestResult performIngest(InputStream inputStream, String jobId) throws Exception {
-        
+    private IngestResult performIngest(InputStream inputStream, String jobId, int maxRows) throws Exception {
+
         long startTime = System.currentTimeMillis();
         AtomicInteger processedCount = new AtomicInteger(0);
         AtomicInteger totalCount = new AtomicInteger(0);
-        
-        // Cấu hình Excel processing cho streaming
+
+        // Cấu hình Excel processing cho streaming - optimized cho migration workload
         ExcelConfig config = ExcelConfig.builder()
-                .batchSize(5000) // Process in batches of 5000 records
+                .batchSize(5000) // Process in batches of 5000 records (optimal for database bulk insert)
                 .memoryThreshold(500) // 500MB memory limit
-                .parallelProcessing(false) // Sequential for data integrity
+                .parallelProcessing(false) // Sequential for data integrity and transaction safety
                 .enableProgressTracking(true)
                 .enableMemoryMonitoring(true)
-                // NOTE: TrueStreamingSAXProcessor always uses streaming
-                .strictValidation(false) // Skip strict validation in ingest phase
+                // NOTE: ExcelFacade automatically uses TrueStreamingSAXProcessor for optimal streaming
+                .strictValidation(false) // Skip strict validation in ingest phase (validation done in Phase 2)
+                .maxRows(maxRows) // ✅ Inline maxRows validation during streaming
                 .build();
-        
-        // Batch processor để lưu vào staging_raw
+
+        // Batch processor để lưu vào staging_raw với optimized buffering
         List<StagingRaw> batchBuffer = new ArrayList<>();
-        
-        // Sử dụng processExcelTrueStreaming cho better performance
-        ExcelUtil.processExcelTrueStreaming(inputStream, ExcelRowDTO.class, config, batch -> {
-            
+
+        // ✨ MIGRATED: Use ExcelFacade instead of ExcelUtil (delegates to same optimized implementation)
+        var processingResult = excelFacade.readExcelWithConfig(inputStream, ExcelRowDTO.class, config, batch -> {
+
             // Convert ExcelRowDTO to StagingRaw entities
             List<StagingRaw> stagingEntities = convertToStagingRaw(batch, jobId);
             batchBuffer.addAll(stagingEntities);
-            
-            // Lưu batch khi đạt kích thước định sẵn
+
+            // Lưu batch khi đạt kích thước định sẵn (bulk insert optimization)
             if (batchBuffer.size() >= config.getBatchSize()) {
                 saveBatch(batchBuffer, jobId);
                 processedCount.addAndGet(batchBuffer.size());
                 batchBuffer.clear();
-                
-                log.debug("Processed batch for JobId: {}, Total processed: {}", 
+
+                log.debug("Processed batch for JobId: {}, Total processed: {}",
                          jobId, processedCount.get());
             }
-            
+
             totalCount.addAndGet(batch.size());
         });
         

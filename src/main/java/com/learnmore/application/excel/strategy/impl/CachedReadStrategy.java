@@ -6,6 +6,7 @@ import com.learnmore.application.utils.exception.ExcelProcessException;
 import com.learnmore.application.utils.sax.TrueStreamingSAXProcessor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Component;
@@ -49,9 +50,12 @@ import java.util.function.Consumer;
  * - Supports: When config.isEnableCaching() == true
  *
  * @param <T> The type of objects to read from Excel
+ *
+ * NOTE: Only enabled if CacheManager bean exists in Spring context
  */
 @Slf4j
 @Component
+@ConditionalOnBean(CacheManager.class)
 @RequiredArgsConstructor
 public class CachedReadStrategy<T> implements ReadStrategy<T> {
 

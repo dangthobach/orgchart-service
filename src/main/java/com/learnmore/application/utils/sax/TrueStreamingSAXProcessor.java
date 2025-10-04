@@ -189,13 +189,24 @@ public class TrueStreamingSAXProcessor<T> {
                 log.debug("Header processed with {} columns", headerMapping.size());
                 return;
             }
-            
+
             // Process completed data row
             if (headerProcessed && currentInstance != null) {
                 try {
+                    // ✅ INLINE maxRows VALIDATION (during streaming, NO buffering)
+                    if (config.getMaxRows() > 0) {
+                        int dataRowsProcessed = (int) totalProcessed.get() + 1; // +1 for current row
+                        if (dataRowsProcessed > config.getMaxRows()) {
+                            throw new RuntimeException(String.format(
+                                "Số lượng bản ghi trong file (%d) vượt quá giới hạn cho phép (%d). " +
+                                "Vui lòng chia nhỏ file hoặc tăng giới hạn xử lý.",
+                                dataRowsProcessed, config.getMaxRows()));
+                        }
+                    }
+
                     // Run validations
                     runValidations(currentInstance, rowNum);
-                    
+
                     // Add to current batch
                     @SuppressWarnings("unchecked")
                     T typedInstance = (T) currentInstance;
@@ -212,12 +223,16 @@ public class TrueStreamingSAXProcessor<T> {
                         totalProcessed.get() % config.getProgressReportInterval() == 0) {
                         log.info("Processed {} rows in streaming mode", totalProcessed.get());
                     }
-                    
+
                 } catch (Exception e) {
                     totalErrors.incrementAndGet();
                     log.warn("Error processing row {}: {}", rowNum, e.getMessage());
+                    // Re-throw if it's a maxRows violation (don't continue processing)
+                    if (e.getMessage() != null && e.getMessage().contains("vượt quá giới hạn")) {
+                        throw new RuntimeException(e);
+                    }
                 }
-                
+
                 currentInstance = null;
             }
         }
