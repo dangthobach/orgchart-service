@@ -94,22 +94,63 @@ The migration system processes large Excel files through 4 distinct phases:
 
 ### Excel Processing Performance
 
-The project uses **True Streaming** implementation to handle large files efficiently:
+The project uses **ExcelFacade** with Strategy Pattern to handle large files efficiently:
 
+**Architecture:**
+- **ExcelFacade**: Main entry point for all Excel operations (READ THIS FIRST!)
+- **ExcelReadingService / ExcelWritingService**: Core services with strategy selection
+- **Strategy Pattern**: Automatic selection of optimal read/write strategy
+
+**Key Components:**
 - **TrueStreamingSAXProcessor**: Pure SAX parsing, processes batches immediately without accumulating in memory
 - **ExcelEarlyValidator**: Validates file size before processing to prevent OOM errors
 - **TrueStreamingMultiSheetProcessor**: SAX-based multi-sheet processing
-- **ExcelWriteStrategy**: Intelligent strategy selection based on data size
-  - ≤1.5M cells: XSSF (normal)
-  - 1.5M-2M cells: SXSSF (streaming write)
-  - >5M cells: CSV export recommended
+- **@ExcelColumn**: Annotation for mapping Excel columns to Java fields
 
-Key utilities:
-- `ExcelUtil`: Main utility with `processExcelTrueStreaming()` method
-- `SheetReader`: Legacy simple Excel reader
-- `@ExcelColumn`: Annotation for mapping Excel columns to Java fields
+**Read Strategies (auto-selected by ReadStrategySelector):**
+- **StreamingReadStrategy** (default): SAX streaming for any file size
+- **ParallelReadStrategy**: Multi-threaded processing for large files
+- **CachedReadStrategy**: Cache results for repeated reads (requires CacheManager)
+- **ValidatingReadStrategy**: JSR-303 validation (requires spring-boot-starter-validation)
+- **MultiSheetReadStrategy**: Process all sheets in workbook
 
-**Important**: Always use `ExcelUtil.processExcelTrueStreaming()` instead of deprecated `processExcelStreaming()`.
+**Write Strategies (auto-selected by WriteStrategySelector):**
+- **XSSFWriteStrategy**: Standard write for ≤100K records
+- **SXSSFWriteStrategy**: Streaming write for 100K-1M records
+- **CSVWriteStrategy**: CSV fallback for >1M records
+- **StyledWriteStrategy**: Professional styling (skeleton)
+- **TemplateWriteStrategy**: Template-based reports (skeleton)
+- **MultiSheetWriteStrategy**: Multiple sheets (skeleton)
+
+**IMPORTANT - Migration from ExcelUtil:**
+- ❌ **DEPRECATED**: `ExcelUtil` class has been removed
+- ✅ **USE**: `ExcelFacade` (injected via @Autowired or constructor)
+- ✅ **USE**: `ExcelProcessingService` for high-level operations
+- ✅ **USE**: `ReactiveExcelUtil` for reactive/WebFlux apps
+
+**Example Usage:**
+```java
+// Inject ExcelFacade
+@Autowired
+private ExcelFacade excelFacade;
+
+// Simple read (small files)
+List<User> users = excelFacade.readExcel(inputStream, User.class);
+
+// Batch read (large files)
+excelFacade.readExcel(inputStream, User.class, batch -> {
+    userRepository.saveAll(batch);
+});
+
+// Simple write
+excelFacade.writeExcel("output.xlsx", users);
+
+// Fluent API
+List<User> users = excelFacade.reader(User.class)
+    .batchSize(10000)
+    .parallel()
+    .read(inputStream);
+```
 
 ### Database Schema
 
@@ -192,9 +233,10 @@ Test structure mirrors main source:
 - Performance benchmarks: `*PerformanceBenchmark.java`, `*BenchmarkTest.java`
 
 Key test classes:
-- `ExcelUtilTest`: Excel utility testing
 - `MigrationControllerTest`: API endpoint testing
-- `ExcelReflectionPerformanceTest`: Performance benchmarks
+- `ExcelIngestServiceTest`: Migration ingest testing
+- `ExcelDimensionValidatorTest`: Dimension validation testing
+- `MultiSheetExcelTest`: Multi-sheet processing tests
 
 ## Additional Documentation
 

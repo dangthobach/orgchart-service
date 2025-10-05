@@ -3,7 +3,8 @@
     "allow": [
       "Bash(mvn clean:*)",
       "Bash(./mvnw:*)",
-      "Bash(test:*)"
+      "Bash(test:*)",
+      "Bash(git rm:*)"
     ],
     "deny": [],
     "ask": []

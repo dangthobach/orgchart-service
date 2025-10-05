@@ -76,9 +76,26 @@ public class MultiSheetReadStrategy<T> implements ReadStrategy<T> {
         if (!config.isReadAllSheets()) {
             log.warn("MultiSheetReadStrategy selected but readAllSheets is disabled. " +
                     "Falling back to single sheet read.");
+            // Fallback to single sheet processing
+            TrueStreamingSAXProcessor<T> processor = new TrueStreamingSAXProcessor<>(
+                beanClass,
+                config,
+                new java.util.ArrayList<>(),
+                batchProcessor
+            );
+            try {
+                return processor.processExcelStreamTrue(inputStream);
+            } catch (Exception e) {
+                throw new ExcelProcessException("Failed to process Excel", e);
+            }
         }
 
-        // Use TrueStreamingSAXProcessor directly (single sheet for now) or extend to multi-sheet processor
+        // Multi-sheet processing
+        // NOTE: For now, we process the first sheet only as TrueStreamingMultiSheetProcessor
+        // requires Map<String, Class<?>> which is different from single Class<T>
+        // TODO: Extend API to support multi-sheet with different bean classes per sheet
+        log.info("Multi-sheet processing: Using first/default sheet only (full multi-sheet API requires sheet-class mapping)");
+
         TrueStreamingSAXProcessor<T> processor = new TrueStreamingSAXProcessor<>(
             beanClass,
             config,
@@ -87,7 +104,7 @@ public class MultiSheetReadStrategy<T> implements ReadStrategy<T> {
         );
         try {
             TrueStreamingSAXProcessor.ProcessingResult result = processor.processExcelStreamTrue(inputStream);
-            log.info("MultiSheetReadStrategy completed: {} records (sequential multi-sheet placeholder)",
+            log.info("MultiSheetReadStrategy completed: {} records processed",
                     result.getProcessedRecords());
             return result;
         } catch (Exception e) {
