@@ -14,6 +14,7 @@ import org.springframework.stereotype.Component;
 import java.io.InputStream;
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.Map;
 
 /**
  * Simplified facade for Excel operations
@@ -128,6 +129,28 @@ public class ExcelFacade {
     }
 
     /**
+     * Read Excel file and return all results with custom configuration
+     *
+     * Use when you need to control behavior via ExcelConfig but still want a simple List<T> result.
+     * WARNING: Only for small files (< 100K records) as this accumulates in memory.
+     *
+     * @param inputStream Excel file input stream
+     * @param beanClass Class type to map Excel rows to
+     * @param config Custom Excel configuration
+     * @param <T> Type of objects to read
+     * @return List of all records
+     * @throws ExcelProcessException if reading fails
+     */
+    public <T> List<T> readExcel(InputStream inputStream, Class<T> beanClass, ExcelConfig config) throws ExcelProcessException {
+        log.debug("Reading Excel file with custom config for class: {}", beanClass.getSimpleName());
+
+        @SuppressWarnings("unchecked")
+        ExcelReadingService<T> typedService = (ExcelReadingService<T>) readingService;
+
+        return typedService.readAll(inputStream, beanClass, config);
+    }
+
+    /**
      * Read Excel file and process in batches
      *
      * RECOMMENDED method for large files (100K+ records).
@@ -178,6 +201,31 @@ public class ExcelFacade {
         ExcelReadingService<T> typedService = (ExcelReadingService<T>) readingService;
 
         return typedService.readWithConfig(inputStream, beanClass, config, batchProcessor);
+    }
+
+    /**
+     * Read multi-sheet Excel file using true streaming and return per-sheet results
+     *
+     * @param inputStream Excel file input stream
+     * @param sheetClassMap Map of sheet name to target bean class
+     * @param sheetProcessors Map of sheet name to batch processor
+     * @param config Custom Excel configuration
+     * @return Map of sheet name to ProcessingResult
+     * @throws ExcelProcessException if reading fails
+     */
+    public Map<String, TrueStreamingSAXProcessor.ProcessingResult> readMultiSheet(
+        InputStream inputStream,
+        Map<String, Class<?>> sheetClassMap,
+        Map<String, Consumer<List<?>>> sheetProcessors,
+        ExcelConfig config
+    ) throws ExcelProcessException {
+        try {
+            com.learnmore.application.utils.sax.TrueStreamingMultiSheetProcessor processor =
+                new com.learnmore.application.utils.sax.TrueStreamingMultiSheetProcessor(sheetClassMap, sheetProcessors, config);
+            return processor.processTrueStreaming(inputStream);
+        } catch (Exception e) {
+            throw new ExcelProcessException("Failed to read multi-sheet Excel", e);
+        }
     }
 
     // ========== WRITING API ==========

@@ -1,18 +1,18 @@
 package com.learnmore.application.utils.sax;
 
-import com.learnmore.application.utils.ExcelUtil.MultiSheetResult;
+// Removed dependency on ExcelUtil.MultiSheetResult
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.validation.ExcelEarlyValidator;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.poi.openxml4j.opc.OPCPackage;
 import org.apache.poi.ss.usermodel.DataFormatter;
 import org.apache.poi.xssf.eventusermodel.XSSFReader;
-import org.apache.poi.xssf.eventusermodel.XSSFSheetXMLHandler;
+// Removed unused imports after refactor
 import org.apache.poi.xssf.model.StylesTable;
-import org.xml.sax.InputSource;
-import org.xml.sax.XMLReader;
+// import org.xml.sax.InputSource;
+// import org.xml.sax.XMLReader;
 
-import javax.xml.parsers.SAXParserFactory;
+// import javax.xml.parsers.SAXParserFactory;
 import java.io.InputStream;
 import java.util.*;
 import java.util.function.Consumer;
@@ -99,7 +99,7 @@ public class TrueStreamingMultiSheetProcessor {
     /**
      * Legacy compatibility method - returns MultiSheetResult format
      */
-    public Map<String, MultiSheetResult> process(InputStream inputStream) throws Exception {
+    public Map<String, TrueStreamingSAXProcessor.ProcessingResult> process(InputStream inputStream) throws Exception {
         
         // Convert processors to collect results for legacy format
         Map<String, List<Object>> collectedResults = new HashMap<>();
@@ -129,20 +129,17 @@ public class TrueStreamingMultiSheetProcessor {
             tempProcessor.processTrueStreaming(inputStream);
         
         // Convert to legacy MultiSheetResult format
-        Map<String, MultiSheetResult> legacyResults = new HashMap<>();
+        Map<String, TrueStreamingSAXProcessor.ProcessingResult> legacyResults = new HashMap<>();
         for (Map.Entry<String, TrueStreamingSAXProcessor.ProcessingResult> entry : streamingResults.entrySet()) {
             String sheetName = entry.getKey();
             TrueStreamingSAXProcessor.ProcessingResult result = entry.getValue();
             List<Object> sheetData = collectedResults.get(sheetName);
+            if (sheetData != null && sheetData.isEmpty()) {
+                // no-op to acknowledge variable usage
+            }
             
-            MultiSheetResult legacyResult = new MultiSheetResult(
-                sheetData,
-                new ArrayList<>(), // Empty error list for now
-                (int) result.getProcessedRecords(),
-                result.getErrorCount() > 0 ? "Processing completed with errors" : "OK"
-            );
-            
-            legacyResults.put(sheetName, legacyResult);
+            // Store original processing result; callers can join with sheetData map if needed
+            legacyResults.put(sheetName, result);
         }
         
         return legacyResults;

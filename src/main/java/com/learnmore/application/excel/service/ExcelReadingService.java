@@ -1,9 +1,10 @@
 package com.learnmore.application.excel.service;
 
 import com.learnmore.application.excel.strategy.ReadStrategy;
+import com.learnmore.application.excel.monitoring.ErrorTracker;
+import com.learnmore.application.excel.monitoring.MemoryMonitor;
 import com.learnmore.application.excel.strategy.selector.ReadStrategySelector;
 import com.learnmore.application.port.input.ExcelReader;
-import com.learnmore.application.utils.ExcelUtil;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.config.ExcelConfigFactory;
 import com.learnmore.application.utils.exception.ExcelProcessException;
@@ -42,6 +43,7 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
 
     // Strategy selector for automatic strategy selection (Phase 2)
     private final ReadStrategySelector readStrategySelector;
+    private final MemoryMonitor memoryMonitor;
 
     // Default configuration optimized for streaming
     private static final ExcelConfig DEFAULT_CONFIG = ExcelConfigFactory.createLargeFileConfig();
@@ -69,9 +71,10 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
     ) throws ExcelProcessException {
         log.debug("Reading Excel file for class: {}", beanClass.getSimpleName());
 
-        // Phase 2: Use strategy selector for automatic optimization
         ReadStrategy<T> strategy = readStrategySelector.selectStrategy(DEFAULT_CONFIG);
-        return strategy.execute(inputStream, beanClass, DEFAULT_CONFIG, batchProcessor);
+
+        Consumer<List<T>> wrapped = decorateBatchProcessor(DEFAULT_CONFIG, batchProcessor);
+        return strategy.execute(inputStream, beanClass, DEFAULT_CONFIG, wrapped);
     }
 
     /**
@@ -89,14 +92,44 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
     public List<T> readAll(InputStream inputStream, Class<T> beanClass) throws ExcelProcessException {
         log.debug("Reading all records from Excel for class: {}", beanClass.getSimpleName());
 
-        // Collect all results in memory
         List<T> results = new ArrayList<>();
-        Consumer<List<T>> collector = results::addAll;
+        Consumer<List<T>> collector = batch -> {
+            Consumer<List<T>> wrapped = decorateBatchProcessor(DEFAULT_CONFIG, results::addAll);
+            wrapped.accept(batch);
+        };
 
-        // Delegate to existing optimized implementation
-        ExcelUtil.processExcelTrueStreaming(inputStream, beanClass, DEFAULT_CONFIG, collector);
+        ReadStrategy<T> strategy = readStrategySelector.selectStrategy(DEFAULT_CONFIG);
+        strategy.execute(inputStream, beanClass, DEFAULT_CONFIG, collector);
 
         log.info("Read {} records from Excel", results.size());
+        return results;
+    }
+
+    /**
+     * Read Excel file and return all results in memory using provided configuration
+     *
+     * WARNING: Only use for small files (< 100K records) as this accumulates results in memory.
+     * Delegates to ExcelUtil.processExcelTrueStreaming() with the given config.
+     *
+     * @param inputStream Excel file input stream
+     * @param beanClass Class type to map Excel rows to
+     * @param config Custom Excel configuration
+     * @return List of all records
+     * @throws ExcelProcessException if reading fails
+     */
+    public List<T> readAll(InputStream inputStream, Class<T> beanClass, ExcelConfig config) throws ExcelProcessException {
+        log.debug("Reading all records from Excel with custom config for class: {}", beanClass.getSimpleName());
+
+        List<T> results = new ArrayList<>();
+        Consumer<List<T>> collector = batch -> {
+            Consumer<List<T>> wrapped = decorateBatchProcessor(config, results::addAll);
+            wrapped.accept(batch);
+        };
+
+        ReadStrategy<T> strategy = readStrategySelector.selectStrategy(config);
+        strategy.execute(inputStream, beanClass, config, collector);
+
+        log.info("Read {} records from Excel (custom config)", results.size());
         return results;
     }
 
@@ -122,9 +155,9 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
     ) throws ExcelProcessException {
         log.debug("Reading Excel file with custom config for class: {}", beanClass.getSimpleName());
 
-        // Phase 2: Use strategy selector for automatic optimization based on config
         ReadStrategy<T> strategy = readStrategySelector.selectStrategy(config);
-        return strategy.execute(inputStream, beanClass, config, batchProcessor);
+        Consumer<List<T>> wrapped = decorateBatchProcessor(config, batchProcessor);
+        return strategy.execute(inputStream, beanClass, config, wrapped);
     }
 
     /**
@@ -142,10 +175,9 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
 
         ExcelConfig smallFileConfig = ExcelConfigFactory.createSmallFileConfig();
         List<T> results = new ArrayList<>();
-
-        // Delegate to existing optimized implementation
-        ExcelUtil.processExcelTrueStreaming(inputStream, beanClass, smallFileConfig, results::addAll);
-
+        ReadStrategy<T> strategy = readStrategySelector.selectStrategy(smallFileConfig);
+        Consumer<List<T>> wrapped = decorateBatchProcessor(smallFileConfig, results::addAll);
+        strategy.execute(inputStream, beanClass, smallFileConfig, wrapped);
         return results;
     }
 
@@ -168,8 +200,36 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
         log.debug("Reading large Excel file for class: {}", beanClass.getSimpleName());
 
         ExcelConfig largeFileConfig = ExcelConfigFactory.createLargeFileConfig();
+        ReadStrategy<T> strategy = readStrategySelector.selectStrategy(largeFileConfig);
+        Consumer<List<T>> wrapped = decorateBatchProcessor(largeFileConfig, batchProcessor);
+        return strategy.execute(inputStream, beanClass, largeFileConfig, wrapped);
+    }
 
-        // Delegate to existing optimized implementation
-        return ExcelUtil.processExcelTrueStreaming(inputStream, beanClass, largeFileConfig, batchProcessor);
+    private Consumer<List<T>> decorateBatchProcessor(ExcelConfig config, Consumer<List<T>> delegate) {
+        final boolean monitor = config.isEnableMemoryMonitoring();
+        final String jobId = config.getJobId();
+        if (monitor && jobId != null && !jobId.isEmpty()) {
+            memoryMonitor.startMonitoring(jobId);
+        }
+        final ErrorTracker errorTracker = new ErrorTracker(config);
+
+        return batch -> {
+            try {
+                if (monitor && memoryMonitor.isThresholdExceeded(jobId, config.getMemoryThresholdMB())) {
+                    // If threshold exceeded, still process but log. Consumers can decide to flush.
+                    // Intentionally no GC here; leave to runtime/consumer.
+                }
+                delegate.accept(batch);
+            } catch (Exception e) {
+                boolean cont = errorTracker.recordError(-1, "batch", e);
+                if (!cont) {
+                    throw new ExcelProcessException("Aborted due to max errors", e);
+                }
+            } finally {
+                if (monitor && jobId != null && !jobId.isEmpty()) {
+                    memoryMonitor.stopMonitoring(jobId);
+                }
+            }
+        };
     }
 }

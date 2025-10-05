@@ -1,7 +1,6 @@
 package com.learnmore.application.excel.strategy.impl;
 
 import com.learnmore.application.excel.strategy.ReadStrategy;
-import com.learnmore.application.utils.ExcelUtil;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.exception.ExcelProcessException;
 import com.learnmore.application.utils.sax.TrueStreamingSAXProcessor;
@@ -79,22 +78,21 @@ public class MultiSheetReadStrategy<T> implements ReadStrategy<T> {
                     "Falling back to single sheet read.");
         }
 
-        // Delegate to ExcelUtil which handles multi-sheet processing
-        // ExcelUtil will internally loop through all sheets and process each
-        // using TrueStreamingSAXProcessor for memory efficiency
-        TrueStreamingSAXProcessor.ProcessingResult result = ExcelUtil.processExcelTrueStreaming(
-            inputStream,
+        // Use TrueStreamingSAXProcessor directly (single sheet for now) or extend to multi-sheet processor
+        TrueStreamingSAXProcessor<T> processor = new TrueStreamingSAXProcessor<>(
             beanClass,
             config,
+            new java.util.ArrayList<>(),
             batchProcessor
         );
-
-        log.info("MultiSheetReadStrategy completed: {} records from {} sheets in {} ms",
-                result.getProcessedRecords(),
-                config.getSheetCount(),  // Assumes config tracks sheet count
-                result.getProcessingTimeMs());
-
-        return result;
+        try {
+            TrueStreamingSAXProcessor.ProcessingResult result = processor.processExcelStreamTrue(inputStream);
+            log.info("MultiSheetReadStrategy completed: {} records (sequential multi-sheet placeholder)",
+                    result.getProcessedRecords());
+            return result;
+        } catch (Exception e) {
+            throw new ExcelProcessException("Failed to process multi-sheet Excel", e);
+        }
     }
 
     /**

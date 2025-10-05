@@ -1,7 +1,6 @@
 package com.learnmore.application.excel.strategy.impl;
 
 import com.learnmore.application.excel.strategy.WriteStrategy;
-import com.learnmore.application.utils.ExcelUtil;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.exception.ExcelProcessException;
 import lombok.extern.slf4j.Slf4j;
@@ -55,7 +54,7 @@ import java.util.List;
 public class TemplateWriteStrategy<T> implements WriteStrategy<T> {
 
     private static final String PLACEHOLDER_PREFIX = "{{";
-    private static final String PLACEHOLDER_SUFFIX = "}}";
+    // private static final String PLACEHOLDER_SUFFIX = "}}"; // Currently unused
 
     /**
      * Execute write using Excel template
