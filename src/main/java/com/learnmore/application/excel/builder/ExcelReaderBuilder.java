@@ -48,7 +48,7 @@ import java.util.function.Consumer;
  */
 public class ExcelReaderBuilder<T> {
 
-    private final ExcelReadingService<T> readingService;
+    private final ExcelReadingService readingService;
     private final Class<T> beanClass;
     private final ExcelConfig.Builder configBuilder;
 
@@ -58,7 +58,7 @@ public class ExcelReaderBuilder<T> {
      * @param readingService Reading service
      * @param beanClass Bean class type
      */
-    public ExcelReaderBuilder(ExcelReadingService<T> readingService, Class<T> beanClass) {
+    public ExcelReaderBuilder(ExcelReadingService readingService, Class<T> beanClass) {
         this.readingService = readingService;
         this.beanClass = beanClass;
         this.configBuilder = ExcelConfig.builder();

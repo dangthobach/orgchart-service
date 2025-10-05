@@ -9,6 +9,8 @@ import java.util.*;
 @RestController
 @RequestMapping("/api/migration")
 public class TestMigrationController {
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.learnmore.application.excel.ExcelFacade excelFacade;
     
     @GetMapping("/test")
     public ResponseEntity<Map<String, Object>> test() {
@@ -35,22 +37,22 @@ public class TestMigrationController {
             java.io.InputStream inputStream = com.learnmore.application.utils.validation.ExcelDimensionValidator
                 .wrapWithBuffer(file.getInputStream());
             
-            // Test trực tiếp với ExcelUtil để tránh stream closed issue
-            List<TestExcelData> excelData = com.learnmore.application.utils.ExcelUtil.processExcel(
-                inputStream, 
-                TestExcelData.class
+            // Process via ExcelFacade (migrated from ExcelUtil)
+            java.util.List<TestExcelData> excelData = excelFacade.readExcel(
+                inputStream,
+                TestMigrationController.TestExcelData.class
             );
             
             return ResponseEntity.accepted()
                     .body(Map.of(
-                        "message", "Excel processed successfully with ExcelUtil",
+                        "message", "Excel processed successfully with ExcelFacade",
                         "filename", file.getOriginalFilename(),
                         "size", file.getSize(),
                         "createdBy", createdBy,
                         "maxRows", maxRows,
                         "recordsProcessed", excelData.size(),
                         "status", "COMPLETED",
-                        "note", "Direct ExcelUtil processing test",
+                        "note", "ExcelFacade processing test",
                         "sampleData", excelData.stream().limit(3).toList()
                     ));
                     

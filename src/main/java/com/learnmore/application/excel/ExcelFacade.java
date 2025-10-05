@@ -53,8 +53,8 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class ExcelFacade {
 
-    private final ExcelReadingService<Object> readingService;
-    private final ExcelWritingService<Object> writingService;
+    private final ExcelReadingService readingService;
+    private final ExcelWritingService writingService;
 
     // ========== BUILDER API (Phase 2 - Priority 2) ==========
 
@@ -77,9 +77,7 @@ public class ExcelFacade {
      * @return ExcelReaderBuilder for fluent configuration
      */
     public <T> ExcelReaderBuilder<T> reader(Class<T> beanClass) {
-        @SuppressWarnings("unchecked")
-        ExcelReadingService<T> typedService = (ExcelReadingService<T>) readingService;
-        return new ExcelReaderBuilder<>(typedService, beanClass);
+        return new ExcelReaderBuilder<>(readingService, beanClass);
     }
 
     /**
@@ -100,9 +98,7 @@ public class ExcelFacade {
      * @return ExcelWriterBuilder for fluent configuration
      */
     public <T> ExcelWriterBuilder<T> writer(List<T> data) {
-        @SuppressWarnings("unchecked")
-        ExcelWritingService<T> typedService = (ExcelWritingService<T>) writingService;
-        return new ExcelWriterBuilder<>(typedService, data);
+        return new ExcelWriterBuilder<>(writingService, data);
     }
 
     // ========== READING API ==========
@@ -122,10 +118,7 @@ public class ExcelFacade {
     public <T> List<T> readExcel(InputStream inputStream, Class<T> beanClass) throws ExcelProcessException {
         log.debug("Reading Excel file for class: {}", beanClass.getSimpleName());
 
-        @SuppressWarnings("unchecked")
-        ExcelReadingService<T> typedService = (ExcelReadingService<T>) readingService;
-
-        return typedService.readAll(inputStream, beanClass);
+        return readingService.readAll(inputStream, beanClass);
     }
 
     /**
@@ -144,10 +137,7 @@ public class ExcelFacade {
     public <T> List<T> readExcel(InputStream inputStream, Class<T> beanClass, ExcelConfig config) throws ExcelProcessException {
         log.debug("Reading Excel file with custom config for class: {}", beanClass.getSimpleName());
 
-        @SuppressWarnings("unchecked")
-        ExcelReadingService<T> typedService = (ExcelReadingService<T>) readingService;
-
-        return typedService.readAll(inputStream, beanClass, config);
+        return readingService.readAll(inputStream, beanClass, config);
     }
 
     /**
@@ -170,10 +160,7 @@ public class ExcelFacade {
     ) throws ExcelProcessException {
         log.debug("Reading Excel file with batch processing for class: {}", beanClass.getSimpleName());
 
-        @SuppressWarnings("unchecked")
-        ExcelReadingService<T> typedService = (ExcelReadingService<T>) readingService;
-
-        return typedService.read(inputStream, beanClass, batchProcessor);
+        return readingService.read(inputStream, beanClass, batchProcessor);
     }
 
     /**
@@ -197,10 +184,7 @@ public class ExcelFacade {
     ) throws ExcelProcessException {
         log.debug("Reading Excel file with custom config for class: {}", beanClass.getSimpleName());
 
-        @SuppressWarnings("unchecked")
-        ExcelReadingService<T> typedService = (ExcelReadingService<T>) readingService;
-
-        return typedService.readWithConfig(inputStream, beanClass, config, batchProcessor);
+        return readingService.readWithConfig(inputStream, beanClass, config, batchProcessor);
     }
 
     /**
@@ -244,10 +228,7 @@ public class ExcelFacade {
     public <T> void writeExcel(String fileName, List<T> data) throws ExcelProcessException {
         log.debug("Writing {} records to Excel file: {}", data.size(), fileName);
 
-        @SuppressWarnings("unchecked")
-        ExcelWritingService<T> typedService = (ExcelWritingService<T>) writingService;
-
-        typedService.write(fileName, data);
+        writingService.write(fileName, data);
     }
 
     /**
@@ -263,10 +244,7 @@ public class ExcelFacade {
     public <T> byte[] writeExcelToBytes(List<T> data) throws ExcelProcessException {
         log.debug("Writing {} records to Excel bytes", data.size());
 
-        @SuppressWarnings("unchecked")
-        ExcelWritingService<T> typedService = (ExcelWritingService<T>) writingService;
-
-        return typedService.writeToBytes(data);
+        return writingService.writeToBytes(data);
     }
 
     /**
@@ -283,10 +261,7 @@ public class ExcelFacade {
     public <T> void writeExcelWithConfig(String fileName, List<T> data, ExcelConfig config) throws ExcelProcessException {
         log.debug("Writing {} records to Excel file with custom config: {}", data.size(), fileName);
 
-        @SuppressWarnings("unchecked")
-        ExcelWritingService<T> typedService = (ExcelWritingService<T>) writingService;
-
-        typedService.writeWithConfig(fileName, data, config);
+        writingService.writeWithConfig(fileName, data, config);
     }
 
     // ========== CONVENIENCE METHODS ==========
@@ -305,10 +280,7 @@ public class ExcelFacade {
     public <T> List<T> readSmallFile(InputStream inputStream, Class<T> beanClass) throws ExcelProcessException {
         log.debug("Reading small Excel file for class: {}", beanClass.getSimpleName());
 
-        @SuppressWarnings("unchecked")
-        ExcelReadingService<T> typedService = (ExcelReadingService<T>) readingService;
-
-        return typedService.readSmallFile(inputStream, beanClass);
+        return readingService.readSmallFile(inputStream, beanClass);
     }
 
     /**
@@ -330,10 +302,7 @@ public class ExcelFacade {
     ) throws ExcelProcessException {
         log.debug("Reading large Excel file for class: {}", beanClass.getSimpleName());
 
-        @SuppressWarnings("unchecked")
-        ExcelReadingService<T> typedService = (ExcelReadingService<T>) readingService;
-
-        return typedService.readLargeFile(inputStream, beanClass, batchProcessor);
+        return readingService.readLargeFile(inputStream, beanClass, batchProcessor);
     }
 
     /**
@@ -349,10 +318,7 @@ public class ExcelFacade {
     public <T> void writeSmallFile(String fileName, List<T> data) throws ExcelProcessException {
         log.debug("Writing small Excel file: {} records to {}", data.size(), fileName);
 
-        @SuppressWarnings("unchecked")
-        ExcelWritingService<T> typedService = (ExcelWritingService<T>) writingService;
-
-        typedService.writeSmallFile(fileName, data);
+        writingService.writeSmallFile(fileName, data);
     }
 
     /**
@@ -368,9 +334,6 @@ public class ExcelFacade {
     public <T> void writeLargeFile(String fileName, List<T> data) throws ExcelProcessException {
         log.debug("Writing large Excel file: {} records to {}", data.size(), fileName);
 
-        @SuppressWarnings("unchecked")
-        ExcelWritingService<T> typedService = (ExcelWritingService<T>) writingService;
-
-        typedService.writeLargeFile(fileName, data);
+        writingService.writeLargeFile(fileName, data);
     }
 }

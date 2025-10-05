@@ -4,7 +4,6 @@ import com.learnmore.application.excel.strategy.ReadStrategy;
 import com.learnmore.application.excel.monitoring.ErrorTracker;
 import com.learnmore.application.excel.monitoring.MemoryMonitor;
 import com.learnmore.application.excel.strategy.selector.ReadStrategySelector;
-import com.learnmore.application.port.input.ExcelReader;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.config.ExcelConfigFactory;
 import com.learnmore.application.utils.exception.ExcelProcessException;
@@ -39,7 +38,7 @@ import java.util.function.Consumer;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-public class ExcelReadingService<T> implements ExcelReader<T> {
+public class ExcelReadingService {
 
     // Strategy selector for automatic strategy selection (Phase 2)
     private final ReadStrategySelector readStrategySelector;
@@ -63,8 +62,7 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
      * @return ProcessingResult with statistics
      * @throws ExcelProcessException if reading fails
      */
-    @Override
-    public TrueStreamingSAXProcessor.ProcessingResult read(
+    public <T> TrueStreamingSAXProcessor.ProcessingResult read(
         InputStream inputStream,
         Class<T> beanClass,
         Consumer<List<T>> batchProcessor
@@ -88,8 +86,7 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
      * @return List of all records
      * @throws ExcelProcessException if reading fails
      */
-    @Override
-    public List<T> readAll(InputStream inputStream, Class<T> beanClass) throws ExcelProcessException {
+    public <T> List<T> readAll(InputStream inputStream, Class<T> beanClass) throws ExcelProcessException {
         log.debug("Reading all records from Excel for class: {}", beanClass.getSimpleName());
 
         List<T> results = new ArrayList<>();
@@ -117,7 +114,7 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
      * @return List of all records
      * @throws ExcelProcessException if reading fails
      */
-    public List<T> readAll(InputStream inputStream, Class<T> beanClass, ExcelConfig config) throws ExcelProcessException {
+    public <T> List<T> readAll(InputStream inputStream, Class<T> beanClass, ExcelConfig config) throws ExcelProcessException {
         log.debug("Reading all records from Excel with custom config for class: {}", beanClass.getSimpleName());
 
         List<T> results = new ArrayList<>();
@@ -146,8 +143,7 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
      * @return ProcessingResult with statistics
      * @throws ExcelProcessException if reading fails
      */
-    @Override
-    public TrueStreamingSAXProcessor.ProcessingResult readWithConfig(
+    public <T> TrueStreamingSAXProcessor.ProcessingResult readWithConfig(
         InputStream inputStream,
         Class<T> beanClass,
         ExcelConfig config,
@@ -170,7 +166,7 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
      * @return List of all records
      * @throws ExcelProcessException if reading fails
      */
-    public List<T> readSmallFile(InputStream inputStream, Class<T> beanClass) throws ExcelProcessException {
+    public <T> List<T> readSmallFile(InputStream inputStream, Class<T> beanClass) throws ExcelProcessException {
         log.debug("Reading small Excel file for class: {}", beanClass.getSimpleName());
 
         ExcelConfig smallFileConfig = ExcelConfigFactory.createSmallFileConfig();
@@ -192,7 +188,7 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
      * @return ProcessingResult with statistics
      * @throws ExcelProcessException if reading fails
      */
-    public TrueStreamingSAXProcessor.ProcessingResult readLargeFile(
+    public <T> TrueStreamingSAXProcessor.ProcessingResult readLargeFile(
         InputStream inputStream,
         Class<T> beanClass,
         Consumer<List<T>> batchProcessor
@@ -205,7 +201,7 @@ public class ExcelReadingService<T> implements ExcelReader<T> {
         return strategy.execute(inputStream, beanClass, largeFileConfig, wrapped);
     }
 
-    private Consumer<List<T>> decorateBatchProcessor(ExcelConfig config, Consumer<List<T>> delegate) {
+    private <T> Consumer<List<T>> decorateBatchProcessor(ExcelConfig config, Consumer<List<T>> delegate) {
         final boolean monitor = config.isEnableMemoryMonitoring();
         final String jobId = config.getJobId();
         if (monitor && jobId != null && !jobId.isEmpty()) {

@@ -7,7 +7,6 @@ import com.learnmore.application.port.output.UserRepository;
 import com.learnmore.domain.menu.Menu;
 import com.learnmore.domain.role.Role;
 import com.learnmore.domain.user.User;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 

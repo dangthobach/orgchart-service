@@ -48,7 +48,7 @@ import java.util.List;
  */
 public class ExcelWriterBuilder<T> {
 
-    private final ExcelWritingService<T> writingService;
+    private final ExcelWritingService writingService;
     private final List<T> data;
     private final ExcelConfig.Builder configBuilder;
     private int rowStart = 0;
@@ -60,7 +60,7 @@ public class ExcelWriterBuilder<T> {
      * @param writingService Writing service
      * @param data Data to write
      */
-    public ExcelWriterBuilder(ExcelWritingService<T> writingService, List<T> data) {
+    public ExcelWriterBuilder(ExcelWritingService writingService, List<T> data) {
         this.writingService = writingService;
         this.data = data;
         this.configBuilder = ExcelConfig.builder();

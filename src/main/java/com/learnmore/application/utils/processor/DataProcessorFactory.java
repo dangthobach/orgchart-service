@@ -1,7 +1,7 @@
 package com.learnmore.application.utils.processor;
 
 import com.learnmore.application.utils.processor.impl.CsvDataProcessor;
-import com.learnmore.application.utils.processor.impl.ExcelDataProcessor;
+// Removed ExcelDataProcessor - Excel processing handled by ExcelFacade/Services
 import com.learnmore.application.utils.processor.impl.JsonDataProcessor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -167,7 +167,7 @@ public class DataProcessorFactory {
     
     private void initializeDefaultProcessors() {
         // Register built-in processors
-        registerProcessor(new ExcelDataProcessor<>());
+        // Excel handled externally; no ExcelDataProcessor registration
         registerProcessor(new CsvDataProcessor<>());
         registerProcessor(new JsonDataProcessor<>());
         
@@ -178,7 +178,7 @@ public class DataProcessorFactory {
         switch (format.toLowerCase()) {
             case "xlsx":
             case "xls":
-                return new ExcelDataProcessor<>();
+                return null; // Excel processing not available via DataProcessor
             case "csv":
             case "txt":
                 return new CsvDataProcessor<>();

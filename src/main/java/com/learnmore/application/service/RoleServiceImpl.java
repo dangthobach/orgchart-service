@@ -8,7 +8,6 @@ import com.learnmore.domain.api.ApiResource;
 import com.learnmore.domain.menu.Menu;
 import com.learnmore.domain.permission.Permission;
 import com.learnmore.domain.role.Role;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
