@@ -1,8 +1,8 @@
 package com.learnmore.application.excel.service;
 
+import com.learnmore.application.excel.helper.ExcelWriteHelper;
 import com.learnmore.application.excel.strategy.WriteStrategy;
 import com.learnmore.application.excel.strategy.selector.WriteStrategySelector;
-// Removed direct dependency on ExcelWriter port to allow method-level generics
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.config.ExcelConfigFactory;
 import com.learnmore.application.utils.exception.ExcelProcessException;
@@ -10,22 +10,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.io.ByteArrayOutputStream;
-import java.io.FileOutputStream;
-import java.lang.reflect.Field;
 import java.util.List;
-import java.util.ArrayList;
-import java.util.concurrent.ConcurrentMap;
-
-import com.learnmore.application.utils.cache.ReflectionCache;
-import org.apache.poi.ss.usermodel.Cell;
-import org.apache.poi.ss.usermodel.CellStyle;
-import org.apache.poi.ss.usermodel.Font;
-import org.apache.poi.ss.usermodel.Row;
-import org.apache.poi.ss.usermodel.Sheet;
-import org.apache.poi.ss.usermodel.Workbook;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
-import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 
 /**
  * Service for writing Excel files with automatic strategy selection
@@ -51,8 +36,11 @@ import org.apache.poi.xssf.streaming.SXSSFWorkbook;
 @RequiredArgsConstructor
 public class ExcelWritingService {
 
-    // Strategy selector for automatic strategy selection (Phase 2)
+    // Strategy selector for automatic strategy selection
     private final WriteStrategySelector writeStrategySelector;
+
+    // Helper for low-level POI operations (Phase 2 refactoring)
+    private final ExcelWriteHelper writeHelper;
 
     // Default configuration optimized for writing
     private static final ExcelConfig DEFAULT_CONFIG = ExcelConfigFactory.createProductionConfig();
@@ -85,7 +73,7 @@ public class ExcelWritingService {
      * Write data to Excel bytes (in-memory)
      *
      * WARNING: Only use for small files (< 50K records).
-     * Delegates to ExcelUtil.writeToExcelBytes() - ZERO performance impact.
+     * Phase 2: Now delegates to ExcelWriteHelper instead of internal methods.
      *
      * @param data List of objects to write
      * @return Excel file as byte array
@@ -100,9 +88,9 @@ public class ExcelWritingService {
         try {
             boolean useStreaming = data.size() > 50_000;
             if (useStreaming) {
-                return writeToBytesSXSSF(data, DEFAULT_CONFIG, 2000);
+                return writeHelper.writeToBytesSXSSF(data, DEFAULT_CONFIG, 2000);
             } else {
-                return writeToBytesXSSF(data, DEFAULT_CONFIG);
+                return writeHelper.writeToBytesXSSF(data, DEFAULT_CONFIG);
             }
         } catch (Exception e) {
             throw new ExcelProcessException("Failed to generate Excel bytes", e);
@@ -133,7 +121,10 @@ public class ExcelWritingService {
     /**
      * Write data to Excel file with custom start positions
      *
-     * Delegates to ExcelUtil.writeToExcel() - ZERO performance impact.
+     * NOTE: This method is ACTIVELY USED by ExcelWriterBuilder for position-aware writes.
+     * Phase 2: Now delegates to ExcelWriteHelper instead of internal POI code.
+     *
+     * TODO (PHASE 3): Add executeWithPosition() to WriteStrategy interface for full consistency.
      *
      * @param fileName Output file name
      * @param data List of objects to write
@@ -156,10 +147,12 @@ public class ExcelWritingService {
                 throw new ExcelProcessException("Data list cannot be null or empty");
             }
             boolean useStreaming = data.size() > 50_000;
+            int windowSize = Math.min(5000, Math.max(200, config.getFlushInterval()));
+
             if (useStreaming) {
-                writeToFileSXSSF(fileName, data, rowStart, columnStart, config, Math.min(5000, Math.max(200, config.getFlushInterval())));
+                writeHelper.writeToFileSXSSF(fileName, data, rowStart, columnStart, config, windowSize);
             } else {
-                writeToFileXSSF(fileName, data, rowStart, columnStart, config);
+                writeHelper.writeToFileXSSF(fileName, data, rowStart, columnStart, config);
             }
             log.info("Successfully wrote {} records to {}", data.size(), fileName);
         } catch (Exception e) {
@@ -171,6 +164,10 @@ public class ExcelWritingService {
      * Write data to Excel file optimized for small files
      *
      * Uses XSSF (standard) workbook for best compatibility.
+     *
+     * NOTE: This is a convenience method accessed via ExcelFacade.writeSmallFile()
+     * It's kept in the public API for explicit small-file optimization.
+     * Direct usage is rare - most callers use write() with automatic strategy selection.
      *
      * @param fileName Output file name
      * @param data List of objects to write (< 50K records recommended)
@@ -193,6 +190,10 @@ public class ExcelWritingService {
      *
      * Uses SXSSF streaming workbook for memory efficiency.
      *
+     * NOTE: This is a convenience method accessed via ExcelFacade.writeLargeFile()
+     * It's kept in the public API for explicit large-file optimization.
+     * Direct usage is rare - most callers use write() with automatic strategy selection.
+     *
      * @param fileName Output file name
      * @param data List of objects to write (500K - 2M records)
      * @throws ExcelProcessException if writing fails
@@ -207,172 +208,5 @@ public class ExcelWritingService {
         strategy.execute(fileName, data, largeFileConfig);
 
         log.info("Successfully wrote large file: {} records to {}", data.size(), fileName);
-    }
-
-    /**
-     * Write data with automatic CSV conversion for very large files
-     *
-     * If data size exceeds threshold, automatically converts to CSV
-     * for 10x+ performance improvement.
-     *
-     * @param fileName Output file name (may be changed to .csv)
-     * @param data List of objects to write
-     * @throws ExcelProcessException if writing fails
-     */
-    public <T> void writeWithAutoCSV(String fileName, List<T> data) throws ExcelProcessException {
-        log.debug("Writing with auto-CSV: {} records to {}", data.size(), fileName);
-
-        ExcelConfig csvConfig = ExcelConfigFactory.createMigrationConfig();
-
-        // Use selector; CSV strategy should handle conversion
-        WriteStrategy<T> strategy = writeStrategySelector.selectStrategy(data.size(), csvConfig);
-        strategy.execute(fileName, data, csvConfig);
-
-        log.info("Successfully wrote {} records (auto-CSV enabled)", data.size());
-    }
-
-    private <T> byte[] writeToBytesXSSF(List<T> data, ExcelConfig config) throws Exception {
-        ReflectionCache reflectionCache = ReflectionCache.getInstance();
-        @SuppressWarnings("unchecked")
-        Class<T> beanClass = (Class<T>) data.get(0).getClass();
-        try (XSSFWorkbook workbook = new XSSFWorkbook(); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            Sheet sheet = workbook.createSheet("Sheet1");
-            ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
-            List<String> columnNames = new ArrayList<>(excelFields.keySet());
-            Row headerRow = sheet.createRow(0);
-            CellStyle headerStyle = createHeaderStyle(workbook);
-            for (int i = 0; i < columnNames.size(); i++) {
-                Cell cell = headerRow.createCell(i);
-                cell.setCellValue(columnNames.get(i));
-                cell.setCellStyle(headerStyle);
-            }
-            int currentRow = 1;
-            for (T item : data) {
-                Row row = sheet.createRow(currentRow++);
-                writeRowData(row, item, columnNames, excelFields, 0);
-            }
-            workbook.write(out);
-            return out.toByteArray();
-        }
-    }
-
-    private <T> byte[] writeToBytesSXSSF(List<T> data, ExcelConfig config, int windowSize) throws Exception {
-        ReflectionCache reflectionCache = ReflectionCache.getInstance();
-        @SuppressWarnings("unchecked")
-        Class<T> beanClass = (Class<T>) data.get(0).getClass();
-        try (SXSSFWorkbook workbook = new SXSSFWorkbook(windowSize); ByteArrayOutputStream out = new ByteArrayOutputStream()) {
-            Sheet sheet = workbook.createSheet("Sheet1");
-            ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
-            List<String> columnNames = new ArrayList<>(excelFields.keySet());
-            Row headerRow = sheet.createRow(0);
-            CellStyle headerStyle = createHeaderStyle(workbook);
-            for (int i = 0; i < columnNames.size(); i++) {
-                Cell cell = headerRow.createCell(i);
-                cell.setCellValue(columnNames.get(i));
-                cell.setCellStyle(headerStyle);
-            }
-            int currentRow = 1;
-            for (T item : data) {
-                Row row = sheet.createRow(currentRow++);
-                writeRowData(row, item, columnNames, excelFields, 0);
-            }
-            workbook.write(out);
-            workbook.dispose();
-            return out.toByteArray();
-        }
-    }
-
-    private <T> void writeToFileXSSF(String fileName, List<T> data, int rowStart, int columnStart, ExcelConfig config) throws Exception {
-        ReflectionCache reflectionCache = ReflectionCache.getInstance();
-        @SuppressWarnings("unchecked")
-        Class<T> beanClass = (Class<T>) data.get(0).getClass();
-        try (XSSFWorkbook workbook = new XSSFWorkbook(); FileOutputStream fos = new FileOutputStream(fileName)) {
-            Sheet sheet = workbook.createSheet("Sheet1");
-            ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
-            List<String> columnNames = new ArrayList<>(excelFields.keySet());
-            Row headerRow = sheet.createRow(rowStart);
-            CellStyle headerStyle = createHeaderStyle(workbook);
-            for (int i = 0; i < columnNames.size(); i++) {
-                Cell cell = headerRow.createCell(columnStart + i);
-                cell.setCellValue(columnNames.get(i));
-                cell.setCellStyle(headerStyle);
-            }
-            int currentRow = rowStart + 1;
-            for (T item : data) {
-                Row row = sheet.createRow(currentRow++);
-                writeRowData(row, item, columnNames, excelFields, columnStart);
-            }
-            workbook.write(fos);
-        }
-    }
-
-    private <T> void writeToFileSXSSF(String fileName, List<T> data, int rowStart, int columnStart, ExcelConfig config, int windowSize) throws Exception {
-        ReflectionCache reflectionCache = ReflectionCache.getInstance();
-        @SuppressWarnings("unchecked")
-        Class<T> beanClass = (Class<T>) data.get(0).getClass();
-        try (SXSSFWorkbook workbook = new SXSSFWorkbook(windowSize); FileOutputStream fos = new FileOutputStream(fileName)) {
-            Sheet sheet = workbook.createSheet("Sheet1");
-            ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
-            List<String> columnNames = new ArrayList<>(excelFields.keySet());
-            Row headerRow = sheet.createRow(rowStart);
-            CellStyle headerStyle = createHeaderStyle(workbook);
-            for (int i = 0; i < columnNames.size(); i++) {
-                Cell cell = headerRow.createCell(columnStart + i);
-                cell.setCellValue(columnNames.get(i));
-                cell.setCellStyle(headerStyle);
-            }
-            int currentRow = rowStart + 1;
-            for (T item : data) {
-                Row row = sheet.createRow(currentRow++);
-                writeRowData(row, item, columnNames, excelFields, columnStart);
-            }
-            workbook.write(fos);
-            workbook.dispose();
-        }
-    }
-
-    private CellStyle createHeaderStyle(Workbook workbook) {
-        CellStyle style = workbook.createCellStyle();
-        Font font = workbook.createFont();
-        font.setBold(true);
-        style.setFont(font);
-        return style;
-    }
-
-    private void writeRowData(Row row, Object item, List<String> columnNames, ConcurrentMap<String, Field> excelFields, int columnStart) throws IllegalAccessException {
-        for (int i = 0; i < columnNames.size(); i++) {
-            String columnName = columnNames.get(i);
-            Field field = excelFields.get(columnName);
-            if (field != null) {
-                field.setAccessible(true);
-                Object value = field.get(item);
-                Cell cell = row.createCell(columnStart + i);
-                setCellValue(cell, value);
-            }
-        }
-    }
-
-    private void setCellValue(Cell cell, Object value) {
-        if (value == null) {
-            cell.setCellValue("");
-            return;
-        }
-        if (value instanceof String) {
-            cell.setCellValue((String) value);
-        } else if (value instanceof Integer) {
-            cell.setCellValue((Integer) value);
-        } else if (value instanceof Long) {
-            cell.setCellValue((Long) value);
-        } else if (value instanceof Double) {
-            cell.setCellValue((Double) value);
-        } else if (value instanceof Float) {
-            cell.setCellValue((Float) value);
-        } else if (value instanceof Boolean) {
-            cell.setCellValue((Boolean) value);
-        } else if (value instanceof java.util.Date) {
-            cell.setCellValue((java.util.Date) value);
-        } else {
-            cell.setCellValue(value.toString());
-        }
     }
 }

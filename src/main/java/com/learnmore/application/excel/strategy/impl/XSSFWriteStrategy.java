@@ -1,19 +1,14 @@
 package com.learnmore.application.excel.strategy.impl;
 
+import com.learnmore.application.excel.helper.ExcelWriteHelper;
 import com.learnmore.application.excel.strategy.WriteStrategy;
-import com.learnmore.application.utils.cache.ReflectionCache;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.exception.ExcelProcessException;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.apache.poi.ss.usermodel.*;
-import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.springframework.stereotype.Component;
 
-import java.io.FileOutputStream;
-import java.lang.reflect.Field;
-import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ConcurrentMap;
 
 /**
  * XSSF write strategy for small Excel files
@@ -28,8 +23,10 @@ import java.util.concurrent.ConcurrentMap;
  * - File size: Up to 50K records or 1M cells
  * - Compatibility: Excellent (standard Excel format)
  *
- * This strategy ALWAYS delegates to ExcelUtil.writeToExcel() which
- * automatically uses XSSF for small files based on cell count.
+ * PHASE 3 REFACTORING:
+ * - Delegates all POI operations to ExcelWriteHelper
+ * - No duplicate code (DRY principle)
+ * - Lightweight strategy (coordination only)
  *
  * When to use:
  * - Small files (< 50K records)
@@ -40,17 +37,15 @@ import java.util.concurrent.ConcurrentMap;
  * Strategy selection criteria:
  * - Data size < 50,000 records
  * - Total cells < 1,000,000 cells
- * - forceXSSF == true in config (optional)
- *
- * Strategy selection:
- * - Priority: 20 (highest for small files)
- * - Supports: Only small files or when forceXSSF enabled
  *
  * @param <T> The type of objects to write to Excel
  */
 @Slf4j
 @Component
+@RequiredArgsConstructor
 public class XSSFWriteStrategy<T> implements WriteStrategy<T> {
+
+    private final ExcelWriteHelper writeHelper;
 
     // Thresholds for XSSF strategy selection
     private static final int MAX_RECORDS = 50_000;
@@ -59,9 +54,8 @@ public class XSSFWriteStrategy<T> implements WriteStrategy<T> {
     /**
      * Execute write using XSSF (standard) workbook
      *
-     * This method now implements the XSSF writing logic directly instead of delegating to ExcelUtil.
-     * It creates a standard XSSF workbook and writes all data to memory before saving to file.
-     * Best for small files where memory usage is not a concern.
+     * PHASE 3 REFACTORING: Delegates to ExcelWriteHelper for all POI operations.
+     * This eliminates duplicate code and makes the strategy lightweight.
      *
      * @param fileName Output file name (e.g., "output.xlsx")
      * @param data List of objects to write
@@ -79,114 +73,14 @@ public class XSSFWriteStrategy<T> implements WriteStrategy<T> {
         }
 
         try {
-            // Get reflection cache for field mapping
-            ReflectionCache reflectionCache = ReflectionCache.getInstance();
-            @SuppressWarnings("unchecked")
-            Class<T> beanClass = (Class<T>) data.get(0).getClass();
-            
-            // Create XSSF workbook
-            try (XSSFWorkbook workbook = new XSSFWorkbook();
-                 FileOutputStream fos = new FileOutputStream(fileName)) {
-                
-                // Create sheet
-                Sheet sheet = workbook.createSheet("Sheet1");
-                
-                // Get field mapping from reflection cache
-                ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
-                List<String> columnNames = new ArrayList<>(excelFields.keySet());
-                
-                // Create header row
-                Row headerRow = sheet.createRow(0);
-                CellStyle headerStyle = createHeaderStyle(workbook);
-                for (int i = 0; i < columnNames.size(); i++) {
-                    Cell cell = headerRow.createCell(i);
-                    cell.setCellValue(columnNames.get(i));
-                    cell.setCellStyle(headerStyle);
-                }
-                
-                // Write data rows
-                int currentRow = 1;
-                for (T item : data) {
-                    Row row = sheet.createRow(currentRow++);
-                    writeRowData(row, item, columnNames, excelFields, 0);
-                }
-                
-                // Auto-size columns if enabled
-                if (!config.isDisableAutoSizing()) {
-                    for (int i = 0; i < columnNames.size(); i++) {
-                        sheet.autoSizeColumn(i);
-                    }
-                }
-                
-                // Write workbook to file
-                workbook.write(fos);
-            }
-            
+            // Delegate to ExcelWriteHelper for XSSF write operations
+            writeHelper.writeToFileXSSF(fileName, data, 0, 0, config);
+
             log.info("XSSFWriteStrategy completed: {} records written to {}", data.size(), fileName);
-            
+
         } catch (Exception e) {
             log.error("XSSFWriteStrategy failed for file: {}", fileName, e);
             throw new ExcelProcessException("Failed to write Excel file with XSSF strategy", e);
-        }
-    }
-    
-    /**
-     * Create header style for Excel cells
-     */
-    private CellStyle createHeaderStyle(Workbook workbook) {
-        CellStyle headerStyle = workbook.createCellStyle();
-        Font headerFont = workbook.createFont();
-        headerFont.setBold(true);
-        headerStyle.setFont(headerFont);
-        return headerStyle;
-    }
-    
-    /**
-     * Write row data to Excel row
-     */
-    private void writeRowData(Row row, T item, List<String> columnNames, 
-                             ConcurrentMap<String, Field> excelFields, int columnStart) {
-        for (int i = 0; i < columnNames.size(); i++) {
-            String columnName = columnNames.get(i);
-            Field field = excelFields.get(columnName);
-            
-            if (field != null) {
-                try {
-                    Object value = field.get(item);
-                    Cell cell = row.createCell(columnStart + i);
-                    setCellValue(cell, value);
-                } catch (IllegalAccessException e) {
-                    log.warn("Failed to access field {} for column {}", field.getName(), columnName);
-                }
-            }
-        }
-    }
-    
-    /**
-     * Set cell value with proper type handling
-     */
-    private void setCellValue(Cell cell, Object value) {
-        if (value == null) {
-            cell.setCellValue("");
-            return;
-        }
-        
-        if (value instanceof String) {
-            cell.setCellValue((String) value);
-        } else if (value instanceof Integer) {
-            cell.setCellValue((Integer) value);
-        } else if (value instanceof Long) {
-            cell.setCellValue((Long) value);
-        } else if (value instanceof Double) {
-            cell.setCellValue((Double) value);
-        } else if (value instanceof Float) {
-            cell.setCellValue((Float) value);
-        } else if (value instanceof Boolean) {
-            cell.setCellValue((Boolean) value);
-        } else if (value instanceof java.util.Date) {
-            cell.setCellValue((java.util.Date) value);
-        } else {
-            cell.setCellValue(value.toString());
         }
     }
 

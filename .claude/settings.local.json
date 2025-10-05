@@ -4,7 +4,8 @@
       "Bash(mvn clean:*)",
       "Bash(./mvnw:*)",
       "Bash(test:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(find:*)"
     ],
     "deny": [],
     "ask": []
