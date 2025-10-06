@@ -329,22 +329,19 @@ public class MultiSheetWriteStrategy<T> implements WriteStrategy<T> {
      * Get priority for strategy selection
      *
      * Priority 18 means this strategy is preferred over standard single-sheet
-     * writes (10, 15) when multiple sheets are configured, but lower than
-     * styled (22) and template (25) strategies.
+     * writes (10, 15, 20) when multiple sheets are configured.
      *
-     * Priority ordering:
+     * Priority ordering (active strategies only):
      * - 0: Default/fallback strategy
      * - 10: SXSSFWriteStrategy (medium files)
      * - 15: CSVWriteStrategy (large files)
      * - 18: MultiSheetWriteStrategy (multi-sheet - high)
      * - 20: XSSFWriteStrategy (small files)
-     * - 22: StyledWriteStrategy (styled)
-     * - 25: TemplateWriteStrategy (template - highest)
      *
      * @return Priority level (18 = high for multi-sheet writes)
      */
     @Override
     public int getPriority() {
-        return 18; // Higher than standard writes, lower than styled/template
+        return 18; // Higher than standard writes
     }
 }

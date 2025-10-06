@@ -160,11 +160,10 @@ public class MultiSheetReadStrategy<T> implements ReadStrategy<T> {
      * Priority 5 means this strategy is preferred over StreamingReadStrategy (0)
      * when multi-sheet reading is requested, but lower than ParallelReadStrategy (10).
      *
-     * Priority ordering:
+     * Priority ordering (active strategies only):
      * - 0: StreamingReadStrategy (default baseline)
      * - 5: MultiSheetReadStrategy (multi-sheet support)
      * - 10: ParallelReadStrategy (parallel processing)
-     * - 15: CachedReadStrategy (caching)
      *
      * @return Priority level (5 = medium-high for multi-sheet)
      */

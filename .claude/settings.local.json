@@ -6,7 +6,9 @@
       "Bash(test:*)",
       "Bash(git rm:*)",
       "Bash(find:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(mvn dependency:*)",
+      "Bash(rm:*)"
     ],
     "deny": [],
     "ask": []

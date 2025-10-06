@@ -108,19 +108,20 @@ The project uses **ExcelFacade** with Strategy Pattern to handle large files eff
 - **@ExcelColumn**: Annotation for mapping Excel columns to Java fields
 
 **Read Strategies (auto-selected by ReadStrategySelector):**
-- **StreamingReadStrategy** (default): SAX streaming for any file size
-- **ParallelReadStrategy**: Multi-threaded processing for large files
-- **CachedReadStrategy**: Cache results for repeated reads (requires CacheManager)
-- **ValidatingReadStrategy**: JSR-303 validation (requires spring-boot-starter-validation)
-- **MultiSheetReadStrategy**: Process all sheets in workbook
+- **StreamingReadStrategy** (Priority 0, default): SAX streaming for any file size
+- **MultiSheetReadStrategy** (Priority 5): Process all sheets in workbook
+- **ParallelReadStrategy** (Priority 10): Multi-threaded processing for large files with parallel=true
 
 **Write Strategies (auto-selected by WriteStrategySelector):**
-- **XSSFWriteStrategy**: Standard write for ≤100K records
-- **SXSSFWriteStrategy**: Streaming write for 100K-1M records
-- **CSVWriteStrategy**: CSV fallback for >1M records
-- **StyledWriteStrategy**: Professional styling (skeleton)
-- **TemplateWriteStrategy**: Template-based reports (skeleton)
-- **MultiSheetWriteStrategy**: Multiple sheets (skeleton)
+- **SXSSFWriteStrategy** (Priority 10, default): Streaming write for 100K-1M records
+- **CSVWriteStrategy** (Priority 15): CSV fallback for >1M records (10x faster)
+- **XSSFWriteStrategy** (Priority 20): Standard write for ≤100K records
+- **MultiSheetWriteStrategy** (skeleton): Multiple sheets support (under development)
+
+**Strategy Selection Logic:**
+- **Read**: Automatic selection based on config.parallelProcessing and sheet count
+- **Write**: Automatic selection based on data size (small/medium/large)
+- Spring auto-injection enables easy extension by adding new @Component strategies
 
 **IMPORTANT - Migration from ExcelUtil:**
 - ❌ **DEPRECATED**: `ExcelUtil` class has been removed

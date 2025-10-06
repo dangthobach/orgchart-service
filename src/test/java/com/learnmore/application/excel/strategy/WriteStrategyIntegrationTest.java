@@ -101,9 +101,14 @@ public class WriteStrategyIntegrationTest {
     @Order(2)
     @DisplayName("Should select SXSSF strategy for medium files (50K - 2M records)")
     void testStrategySelection_MediumFile() {
-        // Given: Medium dataset
+        // Given: Medium dataset with preferCSV disabled
         int dataSize = 100_000;
-        ExcelConfig config = ExcelConfigFactory.createProductionConfig();
+        ExcelConfig config = ExcelConfig.builder()
+            .batchSize(8000)
+            .memoryThreshold(512)
+            .enableProgressTracking(true)
+            .preferCSVForLargeData(false) // Disable CSV preference to test SXSSF selection
+            .build();
 
         // When: Select strategy
         WriteStrategy<?> selected = writeStrategySelector.selectStrategy(dataSize, config);
