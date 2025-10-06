@@ -17,35 +17,49 @@ import java.util.function.Consumer;
 import java.util.Map;
 
 /**
- * Simplified facade for Excel operations
+ * Unified facade for Excel operations with automatic strategy selection
  *
  * This facade provides a clean, easy-to-use API for reading and writing Excel files.
  * It hides the complexity of the underlying services and provides sensible defaults.
  *
- * RECOMMENDED: Use this facade for most Excel operations instead of ExcelUtil directly.
+ * RECOMMENDED: Use this facade as the primary entry point for all Excel operations.
  *
  * Features:
- * - Simple API for beginners
- * - Automatic strategy selection for best performance
- * - Dependency injection friendly
+ * - Simple API for beginners and advanced users
+ * - Automatic strategy selection for optimal performance
+ * - Dependency injection friendly (Spring managed)
  * - Easy to test (can mock dependencies)
+ * - Strategy Pattern for extensibility
  *
- * IMPORTANT: This facade delegates to ExcelReadingService and ExcelWritingService,
- * which in turn delegate to the existing optimized ExcelUtil methods.
- * ZERO performance impact - same speed as calling ExcelUtil directly.
+ * Architecture:
+ * - ExcelFacade → ExcelReadingService/ExcelWritingService
+ * - Services → Strategy Selector → Concrete Strategies
+ * - Strategies → TrueStreamingSAXProcessor (read) or ExcelWriteHelper (write)
+ *
+ * Performance:
+ * - Small files (< 50K): XSSF standard format
+ * - Medium files (50K - 2M): SXSSF streaming format
+ * - Large files (> 2M): CSV format (10x faster)
+ * - True streaming: SAX-based processing with zero memory accumulation
  *
  * Example usage:
  * <pre>
  * // Simple reading
  * List<User> users = excelFacade.readExcel(inputStream, User.class);
  *
- * // Batch processing
+ * // Batch processing (recommended for large files)
  * excelFacade.readExcel(inputStream, User.class, batch -> {
  *     userRepository.saveAll(batch);
  * });
  *
- * // Simple writing
+ * // Simple writing (auto-selects XSSF/SXSSF/CSV)
  * excelFacade.writeExcel("output.xlsx", users);
+ *
+ * // Fluent API
+ * excelFacade.reader(User.class)
+ *     .batchSize(10000)
+ *     .parallel()
+ *     .read(inputStream);
  * </pre>
  */
 @Slf4j

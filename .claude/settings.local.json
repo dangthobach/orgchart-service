@@ -5,7 +5,8 @@
       "Bash(./mvnw:*)",
       "Bash(test:*)",
       "Bash(git rm:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []
