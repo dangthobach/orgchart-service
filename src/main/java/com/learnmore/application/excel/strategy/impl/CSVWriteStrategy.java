@@ -7,6 +7,7 @@ import com.learnmore.application.utils.exception.ExcelProcessException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.lang.reflect.Field;
@@ -62,9 +63,13 @@ import java.util.concurrent.ConcurrentMap;
 @Component
 public class CSVWriteStrategy<T> implements WriteStrategy<T> {
 
-    // Thresholds for CSV strategy selection
-    private static final int MIN_RECORDS = 2_000_000;
-    private static final long MIN_CELLS = 5_000_000L;
+    // Thresholds for CSV strategy selection (tuned for large exports)
+    private static final int MIN_RECORDS = 500_000; // prefer CSV from 500K rows
+    private static final long MIN_CELLS = 2_000_000L; // prefer CSV from 2M cells
+
+    // Buffered I/O and batching parameters (defaults; can be overridden via ExcelConfig)
+    private static final int DEFAULT_BUFFER_SIZE = 1_048_576; // 1MB buffered writer
+    private static final int DEFAULT_BATCH_SIZE = 10_000; // number of rows per batch flush
 
     /**
      * Execute write using CSV format
@@ -92,86 +97,121 @@ public class CSVWriteStrategy<T> implements WriteStrategy<T> {
      */
     @Override
     public void execute(String fileName, List<T> data, ExcelConfig config) throws ExcelProcessException {
-        log.debug("Executing CSVWriteStrategy for {} records to {}", data.size(), fileName);
+        log.info("Writing {} records to CSV with optimized buffering", data.size());
 
-        // Validate that data size is appropriate for CSV
-        if (data.size() < MIN_RECORDS) {
-            log.debug("Writing {} records with CSV (smaller file - SXSSF might provide better compatibility)",
-                     data.size());
+        if (data == null || data.isEmpty()) {
+            throw new ExcelProcessException("Data list cannot be null or empty");
         }
 
         // Convert file extension to .csv
         String csvFileName = fileName.replaceAll("\\.(xlsx|xls)$", ".csv");
-        log.info("Converting Excel to CSV format: {} -> {} ({} records)", fileName, csvFileName, data.size());
 
         try {
-            // Get reflection cache for field mapping
+            // Resolve header order and field mapping once
             ReflectionCache reflectionCache = ReflectionCache.getInstance();
             @SuppressWarnings("unchecked")
             Class<T> beanClass = (Class<T>) data.get(0).getClass();
-            
-            // Get field mapping from reflection cache
             ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
             List<String> columnNames = new ArrayList<>(excelFields.keySet());
-            
-            // Write CSV file with streaming
-            try (FileWriter writer = new FileWriter(csvFileName)) {
-                
-                // Write header row
-                writeCSVRow(writer, columnNames);
-                
-                // Write data rows
-                for (T item : data) {
-                    List<String> rowValues = new ArrayList<>();
-                    for (String columnName : columnNames) {
-                        Field field = excelFields.get(columnName);
-                        if (field != null) {
-                            try {
-                                Object value = field.get(item);
-                                rowValues.add(value != null ? value.toString() : "");
-                            } catch (IllegalAccessException e) {
-                                log.warn("Failed to access field {} for column {}", field.getName(), columnName);
-                                rowValues.add("");
-                            }
-                        } else {
-                            rowValues.add("");
-                        }
-                    }
-                    writeCSVRow(writer, rowValues);
+
+            // Prepare ordered Field[] and set accessible once to reduce reflection overhead
+            Field[] orderedFields = new Field[columnNames.size()];
+            for (int i = 0; i < columnNames.size(); i++) {
+                Field f = excelFields.get(columnNames.get(i));
+                if (f != null) {
+                    f.setAccessible(true);
+                }
+                orderedFields[i] = f;
+            }
+
+            int bufferSize = DEFAULT_BUFFER_SIZE;
+            int batchSize = DEFAULT_BATCH_SIZE;
+            if (config != null) {
+                try {
+                    if (config.getCsvBufferSize() > 0) bufferSize = config.getCsvBufferSize();
+                    if (config.getCsvBatchSize() > 0) batchSize = config.getCsvBatchSize();
+                } catch (Throwable ignored) {
+                    // Use defaults if config does not expose csv properties yet
                 }
             }
-            
-            log.info("CSVWriteStrategy completed: {} records written to {} (CSV format)", data.size(), csvFileName);
-            
+
+            try (BufferedWriter writer = new BufferedWriter(new FileWriter(csvFileName), bufferSize)) {
+                // Write header
+                writeCSVHeader(writer, columnNames);
+
+                // Batch buffer
+                StringBuilder batchBuffer = new StringBuilder(batchSize * 200);
+                int inBatch = 0;
+
+                final int total = data.size();
+                for (int i = 0; i < total; i++) {
+                    T item = data.get(i);
+                    appendCSVRow(batchBuffer, item, orderedFields);
+                    inBatch++;
+
+                    if (inBatch >= batchSize || i == total - 1) {
+                        writer.write(batchBuffer.toString());
+                        batchBuffer.setLength(0);
+                        inBatch = 0;
+
+                        if ((i + 1) % 100_000 == 0) {
+                            log.info("Written {}/{} records", i + 1, total);
+                        }
+                    }
+                }
+
+                writer.flush();
+            }
+
+            log.info("CSVWriteStrategy completed: {} records written to {} (CSV)", data.size(), csvFileName);
         } catch (IOException e) {
-            log.error("CSVWriteStrategy failed for file: {}", csvFileName, e);
-            throw new ExcelProcessException("Failed to write CSV file", e);
+            throw new ExcelProcessException("Failed to write CSV", e);
         } catch (Exception e) {
-            log.error("CSVWriteStrategy failed for file: {}", csvFileName, e);
-            throw new ExcelProcessException("Failed to write CSV file with CSV strategy", e);
+            throw new ExcelProcessException("Failed to write CSV (unexpected)", e);
         }
     }
     
     /**
      * Write a CSV row to the file writer
      */
-    private void writeCSVRow(FileWriter writer, List<String> values) throws IOException {
-        for (int i = 0; i < values.size(); i++) {
+    private void writeCSVHeader(BufferedWriter writer, List<String> columnNames) throws IOException {
+        for (int i = 0; i < columnNames.size(); i++) {
             if (i > 0) {
                 writer.write(",");
             }
-            
-            String value = values.get(i);
-            // Escape CSV values that contain commas, quotes, or newlines
+            String value = columnNames.get(i);
             if (value != null && (value.contains(",") || value.contains("\"") || value.contains("\n"))) {
                 writer.write("\"");
-                writer.write(value.replace("\"", "\"\"")); // Escape quotes
+                writer.write(value.replace("\"", "\"\""));
                 writer.write("\"");
             } else {
                 writer.write(value != null ? value : "");
             }
         }
         writer.write("\n");
+    }
+
+    private void appendCSVRow(StringBuilder buffer, T item, Field[] orderedFields) throws IllegalAccessException {
+        for (int i = 0; i < orderedFields.length; i++) {
+            if (i > 0) {
+                buffer.append(',');
+            }
+            Field field = orderedFields[i];
+            String value = "";
+            if (field != null) {
+                Object v = field.get(item);
+                if (v != null) {
+                    value = v.toString();
+                }
+            }
+            if (value.contains(",") || value.contains("\"") || value.contains("\n")) {
+                buffer.append('"').append(value.replace("\"", "\"\""))
+                      .append('"');
+            } else {
+                buffer.append(value);
+            }
+        }
+        buffer.append('\n');
     }
 
     /**

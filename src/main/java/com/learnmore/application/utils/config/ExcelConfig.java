@@ -92,6 +92,10 @@ public class ExcelConfig {
     // Style Support
     private Object styleTemplate; // Custom style template (can be any type)
 
+    // CSV Writing Tuning
+    private int csvBufferSize = 1_048_576; // 1MB default buffer size
+    private int csvBatchSize = 10_000; // 10K rows per batch
+
     public ExcelConfig() {
         // Default constructor
     }
@@ -344,6 +348,17 @@ public class ExcelConfig {
             return this;
         }
 
+        // CSV tuning
+        public Builder csvBufferSize(int bufferSize) {
+            config.csvBufferSize = bufferSize;
+            return this;
+        }
+
+        public Builder csvBatchSize(int batchSize) {
+            config.csvBatchSize = batchSize;
+            return this;
+        }
+
         public ExcelConfig build() {
             return config;
         }
@@ -416,6 +431,14 @@ public class ExcelConfig {
     
     public List<ValidationRule> getGlobalValidationRules() {
         return new ArrayList<>(globalValidationRules);
+    }
+
+    public int getCsvBufferSize() {
+        return csvBufferSize;
+    }
+
+    public int getCsvBatchSize() {
+        return csvBatchSize;
     }
 
     // REMOVED getters: isUseStreamingParser, isEnableDataTypeCache, isEnableReflectionCache

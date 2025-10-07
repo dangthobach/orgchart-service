@@ -53,6 +53,9 @@ application:
       batch-size: 1000
       memory-threshold: 512
       enable-monitoring: true
+    csv:
+      buffer-size: 1048576   # 1MB
+      batch-size: 10000      # rows per batch flush
 
 # Logging
 logging:

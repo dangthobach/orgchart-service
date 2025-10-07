@@ -45,3 +45,10 @@ logging:
     '[org.hibernate.type.descriptor.sql.BasicBinder]': TRACE
     '[com.learnmore]': DEBUG
 
+# Excel CSV tuning (runtime configurable)
+application:
+  excel:
+    csv:
+      buffer-size: 1048576   # 1MB
+      batch-size: 10000      # rows per batch flush
+
