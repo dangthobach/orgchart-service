@@ -58,12 +58,7 @@ public class ExcelWriteHelper {
      * @throws Exception if writing fails
      */
     public <T> byte[] writeToBytesXSSF(List<T> data, ExcelConfig config) throws Exception {
-        if (data == null || data.isEmpty()) {
-            throw new IllegalArgumentException("Data list cannot be null or empty");
-        }
-
-        @SuppressWarnings("unchecked")
-        Class<T> beanClass = (Class<T>) data.get(0).getClass();
+        Class<T> beanClass = resolveBeanClass(data, config);
 
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -72,11 +67,13 @@ public class ExcelWriteHelper {
             ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
             List<String> columnNames = new ArrayList<>(excelFields.keySet());
 
-            // Write header
+            // Write header always (even when data is empty)
             writeHeader(workbook, sheet, columnNames, 0);
 
-            // Write data rows
-            writeDataRows(sheet, data, columnNames, excelFields, 1, 0);
+            // Write data rows if present
+            if (data != null && !data.isEmpty()) {
+                writeDataRows(sheet, data, columnNames, excelFields, 1, 0);
+            }
 
             workbook.write(out);
             return out.toByteArray();
@@ -95,12 +92,7 @@ public class ExcelWriteHelper {
      * @throws Exception if writing fails
      */
     public <T> void writeToFileXSSF(String fileName, List<T> data, int rowStart, int columnStart, ExcelConfig config) throws Exception {
-        if (data == null || data.isEmpty()) {
-            throw new IllegalArgumentException("Data list cannot be null or empty");
-        }
-
-        @SuppressWarnings("unchecked")
-        Class<T> beanClass = (Class<T>) data.get(0).getClass();
+        Class<T> beanClass = resolveBeanClass(data, config);
 
         try (XSSFWorkbook workbook = new XSSFWorkbook();
              FileOutputStream fos = new FileOutputStream(fileName)) {
@@ -109,11 +101,13 @@ public class ExcelWriteHelper {
             ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
             List<String> columnNames = new ArrayList<>(excelFields.keySet());
 
-            // Write header
+            // Write header always (even when data is empty)
             writeHeader(workbook, sheet, columnNames, rowStart, columnStart);
 
-            // Write data rows
-            writeDataRows(sheet, data, columnNames, excelFields, rowStart + 1, columnStart);
+            // Write data rows if present
+            if (data != null && !data.isEmpty()) {
+                writeDataRows(sheet, data, columnNames, excelFields, rowStart + 1, columnStart);
+            }
 
             workbook.write(fos);
         }
@@ -135,12 +129,7 @@ public class ExcelWriteHelper {
      * @throws Exception if writing fails
      */
     public <T> byte[] writeToBytesSXSSF(List<T> data, ExcelConfig config, int windowSize) throws Exception {
-        if (data == null || data.isEmpty()) {
-            throw new IllegalArgumentException("Data list cannot be null or empty");
-        }
-
-        @SuppressWarnings("unchecked")
-        Class<T> beanClass = (Class<T>) data.get(0).getClass();
+        Class<T> beanClass = resolveBeanClass(data, config);
 
         try (SXSSFWorkbook workbook = new SXSSFWorkbook(windowSize);
              ByteArrayOutputStream out = new ByteArrayOutputStream()) {
@@ -149,11 +138,13 @@ public class ExcelWriteHelper {
             ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
             List<String> columnNames = new ArrayList<>(excelFields.keySet());
 
-            // Write header
+            // Write header always (even when data is empty)
             writeHeader(workbook, sheet, columnNames, 0);
 
-            // Write data rows
-            writeDataRows(sheet, data, columnNames, excelFields, 1, 0);
+            // Write data rows if present
+            if (data != null && !data.isEmpty()) {
+                writeDataRows(sheet, data, columnNames, excelFields, 1, 0);
+            }
 
             workbook.write(out);
             workbook.dispose(); // Clean up temporary files
@@ -174,12 +165,7 @@ public class ExcelWriteHelper {
      * @throws Exception if writing fails
      */
     public <T> void writeToFileSXSSF(String fileName, List<T> data, int rowStart, int columnStart, ExcelConfig config, int windowSize) throws Exception {
-        if (data == null || data.isEmpty()) {
-            throw new IllegalArgumentException("Data list cannot be null or empty");
-        }
-
-        @SuppressWarnings("unchecked")
-        Class<T> beanClass = (Class<T>) data.get(0).getClass();
+        Class<T> beanClass = resolveBeanClass(data, config);
 
         try (SXSSFWorkbook workbook = new SXSSFWorkbook(windowSize);
              FileOutputStream fos = new FileOutputStream(fileName)) {
@@ -188,11 +174,13 @@ public class ExcelWriteHelper {
             ConcurrentMap<String, Field> excelFields = reflectionCache.getExcelColumnFields(beanClass);
             List<String> columnNames = new ArrayList<>(excelFields.keySet());
 
-            // Write header
+            // Write header always (even when data is empty)
             writeHeader(workbook, sheet, columnNames, rowStart, columnStart);
 
-            // Write data rows
-            writeDataRows(sheet, data, columnNames, excelFields, rowStart + 1, columnStart);
+            // Write data rows if present
+            if (data != null && !data.isEmpty()) {
+                writeDataRows(sheet, data, columnNames, excelFields, rowStart + 1, columnStart);
+            }
 
             workbook.write(fos);
             workbook.dispose(); // Clean up temporary files
@@ -200,6 +188,17 @@ public class ExcelWriteHelper {
     }
 
     // ========== HELPER METHODS ==========
+
+    @SuppressWarnings("unchecked")
+    private <T> Class<T> resolveBeanClass(List<T> data, ExcelConfig config) throws ClassNotFoundException {
+        if (data != null && !data.isEmpty()) {
+            return (Class<T>) data.get(0).getClass();
+        }
+        if (config != null && config.getOutputBeanClassName() != null && !config.getOutputBeanClassName().isEmpty()) {
+            return (Class<T>) Class.forName(config.getOutputBeanClassName());
+        }
+        throw new IllegalArgumentException("Cannot resolve bean class: provide non-empty data or set outputBeanClassName in ExcelConfig");
+    }
 
     /**
      * Write header row with styling

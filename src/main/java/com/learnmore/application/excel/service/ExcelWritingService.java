@@ -70,31 +70,46 @@ public class ExcelWritingService {
     }
 
     /**
-     * Write data to Excel bytes (in-memory)
-     *
-     * WARNING: Only use for small files (< 50K records).
-     * Phase 2: Now delegates to ExcelWriteHelper instead of internal methods.
-     *
-     * @param data List of objects to write
-     * @return Excel file as byte array
-     * @throws ExcelProcessException if writing fails
+     * Write data to Excel bytes using explicit configuration.
+     * If data is empty, config.outputBeanClassName must be set to render headers.
      */
-    public <T> byte[] writeToBytes(List<T> data) throws ExcelProcessException {
-        log.debug("Writing {} records to Excel bytes", data.size());
-
-        if (data.size() > 50_000) {
-            log.warn("Writing {} records to bytes may cause memory issues. Consider writing to file.", data.size());
-        }
+    public <T> byte[] writeToBytes(List<T> data, ExcelConfig config) throws ExcelProcessException {
+        int size = data != null ? data.size() : 0;
+        log.debug("Writing {} records to Excel bytes (config provided)", size);
         try {
-            boolean useStreaming = data.size() > 50_000;
+            boolean useStreaming = size > 50_000;
             if (useStreaming) {
-                return writeHelper.writeToBytesSXSSF(data, DEFAULT_CONFIG, 2000);
+                return writeHelper.writeToBytesSXSSF(data, config, 2000);
             } else {
-                return writeHelper.writeToBytesXSSF(data, DEFAULT_CONFIG);
+                return writeHelper.writeToBytesXSSF(data, config);
             }
+        } catch (IllegalArgumentException iae) {
+            // Likely due to empty data without outputBeanClassName
+            throw new ExcelProcessException("Cannot generate Excel bytes: provide non-empty data or set outputBeanClassName in ExcelConfig", iae);
         } catch (Exception e) {
             throw new ExcelProcessException("Failed to generate Excel bytes", e);
         }
+    }
+
+    /**
+     * Deprecated: use writeToBytes(List<T> data, ExcelConfig config) instead.
+     */
+    @Deprecated
+    public <T> byte[] writeToBytes(List<T> data) throws ExcelProcessException {
+        return writeToBytes(data, DEFAULT_CONFIG);
+    }
+
+    /**
+     * Deprecated: use writeToBytes(List<T> data, ExcelConfig config) and set
+     * config.outputBeanClassName when data is empty.
+     */
+    @Deprecated
+    public <T> byte[] writeToBytes(List<T> data, Class<T> beanClass) throws ExcelProcessException {
+        ExcelConfig cfg = ExcelConfigFactory.createProductionConfig();
+        if ((data == null || data.isEmpty()) && beanClass != null) {
+            cfg.setOutputBeanClassName(beanClass.getName());
+        }
+        return writeToBytes(data, cfg);
     }
 
     /**

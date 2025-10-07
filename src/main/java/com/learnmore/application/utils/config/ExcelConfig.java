@@ -96,6 +96,9 @@ public class ExcelConfig {
     private int csvBufferSize = 1_048_576; // 1MB default buffer size
     private int csvBatchSize = 10_000; // 10K rows per batch
 
+    // Optional: Fully qualified class name used for output schema when data list is empty
+    private String outputBeanClassName;
+
     public ExcelConfig() {
         // Default constructor
     }
@@ -359,6 +362,11 @@ public class ExcelConfig {
             return this;
         }
 
+        public Builder outputBeanClassName(String className) {
+            config.outputBeanClassName = className;
+            return this;
+        }
+
         public ExcelConfig build() {
             return config;
         }
@@ -439,6 +447,15 @@ public class ExcelConfig {
 
     public int getCsvBatchSize() {
         return csvBatchSize;
+    }
+
+    public String getOutputBeanClassName() {
+        return outputBeanClassName;
+    }
+
+    // Setter for output bean class (used when data list is empty)
+    public void setOutputBeanClassName(String outputBeanClassName) {
+        this.outputBeanClassName = outputBeanClassName;
     }
 
     // REMOVED getters: isUseStreamingParser, isEnableDataTypeCache, isEnableReflectionCache
