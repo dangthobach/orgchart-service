@@ -1,6 +1,8 @@
 package com.learnmore.application.service;
 
 import com.learnmore.application.dto.User;
+import com.learnmore.application.dto.Role;
+import com.learnmore.application.dto.Permission;
 import net.datafaker.Faker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +31,24 @@ public class MockDataGenerator {
     private final String[] departments = {
         "Engineering", "Sales", "Marketing", "HR", "Finance", 
         "Operations", "Legal", "IT", "Customer Service", "Research"
+    };
+    
+    // Predefined role names for realistic data
+    private final String[] roleNames = {
+        "Admin", "Manager", "Developer", "Analyst", "Designer", 
+        "Tester", "Support", "Sales", "Marketing", "HR", 
+        "Finance", "Operations", "Legal", "Customer Service", "Research",
+        "Senior Developer", "Lead Developer", "Project Manager", "Product Manager",
+        "Business Analyst", "Data Analyst", "UX Designer", "UI Designer",
+        "DevOps Engineer", "System Administrator", "Database Administrator",
+        "Security Specialist", "Quality Assurance", "Technical Writer", "Consultant"
+    };
+    
+    // Predefined permission resources
+    private final String[] permissionResources = {
+        "User", "Role", "Permission", "Department", "Project", "Task", "Report",
+        "Dashboard", "Settings", "Profile", "Document", "File", "Notification",
+        "Audit", "Log", "System", "Configuration", "Backup", "Restore", "Export"
     };
     
     public MockDataGenerator() {
@@ -242,6 +262,151 @@ public class MockDataGenerator {
         stats.put("departments", Arrays.asList(departments));
         
         return stats;
+    }
+    
+    /**
+     * Generate specified number of unique Role records
+     * Ensures ID and Name uniqueness across all records
+     */
+    public List<Role> generateRoles(int count) {
+        logger.info("🚀 Starting generation of {} Role records with Java Faker", count);
+        long startTime = System.currentTimeMillis();
+        
+        List<Role> roles = new ArrayList<>(count);
+        Set<String> usedRoleNames = new HashSet<>();
+        
+        for (int i = 0; i < count; i++) {
+            Role role = generateUniqueRole(usedRoleNames);
+            roles.add(role);
+        }
+        
+        long totalTime = System.currentTimeMillis() - startTime;
+        double recordsPerSecond = count * 1000.0 / totalTime;
+        
+        logger.info("✅ Successfully generated {} Role records in {}ms ({:.0f} records/sec)", 
+                   count, totalTime, recordsPerSecond);
+        
+        return roles;
+    }
+    
+    /**
+     * Generate a single Role with guaranteed unique constraints
+     */
+    private Role generateUniqueRole(Set<String> usedRoleNames) {
+        String roleName;
+        int attempts = 0;
+        
+        do {
+            if (attempts < roleNames.length) {
+                // Use predefined role names first
+                roleName = roleNames[attempts];
+            } else {
+                // Generate random role names
+                roleName = faker.job().title() + " " + faker.job().seniority();
+            }
+            attempts++;
+            
+            if (attempts > 1000) {
+                // Fallback to UUID if having trouble generating unique names
+                roleName = "ROLE_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+            }
+        } while (usedRoleNames.contains(roleName));
+        
+        usedRoleNames.add(roleName);
+        
+        String id = "ROLE-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        String description = faker.lorem().sentence(10);
+        Boolean isActive = ThreadLocalRandom.current().nextBoolean();
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime createdAt = now.minusDays(ThreadLocalRandom.current().nextInt(365));
+        LocalDateTime updatedAt = createdAt.plusDays(ThreadLocalRandom.current().nextInt(30));
+        
+        return new Role(id, roleName, description, isActive, createdAt, updatedAt);
+    }
+    
+    /**
+     * Generate specified number of unique Permission records
+     * Ensures ID and Code uniqueness across all records
+     */
+    public List<Permission> generatePermissions(int count) {
+        logger.info("🚀 Starting generation of {} Permission records with Java Faker", count);
+        long startTime = System.currentTimeMillis();
+        
+        List<Permission> permissions = new ArrayList<>(count);
+        Set<String> usedPermissionCodes = new HashSet<>();
+        
+        for (int i = 0; i < count; i++) {
+            Permission permission = generateUniquePermission(usedPermissionCodes);
+            permissions.add(permission);
+        }
+        
+        long totalTime = System.currentTimeMillis() - startTime;
+        double recordsPerSecond = count * 1000.0 / totalTime;
+        
+        logger.info("✅ Successfully generated {} Permission records in {}ms ({:.0f} records/sec)", 
+                   count, totalTime, recordsPerSecond);
+        
+        return permissions;
+    }
+    
+    /**
+     * Generate a single Permission with guaranteed unique constraints
+     */
+    private Permission generateUniquePermission(Set<String> usedPermissionCodes) {
+        String permissionCode;
+        int attempts = 0;
+        
+        do {
+            String resource = permissionResources[ThreadLocalRandom.current().nextInt(permissionResources.length)];
+            Permission.PermissionType type = Permission.PermissionType.values()[
+                ThreadLocalRandom.current().nextInt(Permission.PermissionType.values().length)
+            ];
+            permissionCode = type.getValue() + "_" + resource.toUpperCase();
+            attempts++;
+            
+            if (attempts > 1000) {
+                // Fallback to UUID if having trouble generating unique codes
+                permissionCode = "PERM_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+            }
+        } while (usedPermissionCodes.contains(permissionCode));
+        
+        usedPermissionCodes.add(permissionCode);
+        
+        String id = "PERM-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        String resource = permissionResources[ThreadLocalRandom.current().nextInt(permissionResources.length)];
+        Permission.PermissionType type = Permission.PermissionType.values()[
+            ThreadLocalRandom.current().nextInt(Permission.PermissionType.values().length)
+        ];
+        String name = type.getValue() + " " + resource;
+        String description = faker.lorem().sentence(8);
+        Boolean isActive = ThreadLocalRandom.current().nextBoolean();
+        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime createdAt = now.minusDays(ThreadLocalRandom.current().nextInt(365));
+        LocalDateTime updatedAt = createdAt.plusDays(ThreadLocalRandom.current().nextInt(30));
+        
+        return new Permission(id, name, permissionCode, description, type.getValue(), resource, isActive, createdAt, updatedAt);
+    }
+    
+    /**
+     * Generate all three entity types for multi-sheet Excel export
+     */
+    public Map<String, List<?>> generateAllEntities(int userCount, int roleCount, int permissionCount) {
+        logger.info("🎯 Generating complete dataset: {} Users, {} Roles, {} Permissions", 
+                   userCount, roleCount, permissionCount);
+        
+        Map<String, List<?>> allData = new HashMap<>();
+        
+        // Generate Users
+        allData.put("User", generateUsers(userCount));
+        
+        // Generate Roles
+        allData.put("Role", generateRoles(roleCount));
+        
+        // Generate Permissions
+        allData.put("Permission", generatePermissions(permissionCount));
+        
+        logger.info("✅ Complete dataset generated successfully");
+        return allData;
     }
     
     /**

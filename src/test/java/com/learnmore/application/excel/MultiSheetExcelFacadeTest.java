@@ -63,13 +63,13 @@ public class MultiSheetExcelFacadeTest {
         Map<String, Consumer<List<?>>> sheetProcessors = new HashMap<>();
 
         sheetProcessors.put("Users", batch -> {
-            results.computeIfAbsent("Users", k -> new ArrayList<>()).addAll((List<Object>) batch);
+            results.computeIfAbsent("Users", k -> new ArrayList<>()).addAll(batch);
         });
         sheetProcessors.put("Roles", batch -> {
-            results.computeIfAbsent("Roles", k -> new ArrayList<>()).addAll((List<Object>) batch);
+            results.computeIfAbsent("Roles", k -> new ArrayList<>()).addAll(batch);
         });
         sheetProcessors.put("Departments", batch -> {
-            results.computeIfAbsent("Departments", k -> new ArrayList<>()).addAll((List<Object>) batch);
+            results.computeIfAbsent("Departments", k -> new ArrayList<>()).addAll(batch);
         });
 
         // Process multi-sheet Excel
