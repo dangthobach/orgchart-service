@@ -21,31 +21,39 @@ import jakarta.validation.constraints.Positive;
 @AllArgsConstructor
 public class ExcelRowDTO {
     
-    @ExcelColumn(name = "Kho VPBank")
+    @ExcelColumn(name = "Kho VPBank", required = true, maxLength = 50, dataType = ExcelColumn.ColumnType.STRING,
+                description = "Mã kho lưu trữ", example = "VPB001", position = "A")
     @NotBlank(message = "Kho VPBank không được để trống")
     private String khoVpbank;
     
-    @ExcelColumn(name = "Mã đơn vị")  
+    @ExcelColumn(name = "Mã đơn vị", required = true, maxLength = 20, dataType = ExcelColumn.ColumnType.STRING,
+                description = "Mã đơn vị chủ quản", example = "DV001", position = "B")
     @NotBlank(message = "Mã đơn vị không được để trống")
     private String maDonVi;
     
-    @ExcelColumn(name = "Trách nhiệm bàn giao")
+    @ExcelColumn(name = "Trách nhiệm bàn giao", required = false, maxLength = 100, dataType = ExcelColumn.ColumnType.STRING,
+                description = "Bộ phận chịu trách nhiệm", example = "Phòng Tài chính", position = "C")
     private String trachNhiemBanGiao;
     
-    @ExcelColumn(name = "Loại chứng từ")
+    @ExcelColumn(name = "Loại chứng từ", required = true, maxLength = 100, dataType = ExcelColumn.ColumnType.STRING,
+                description = "Loại chứng từ tài liệu", example = "Hợp đồng", position = "D")
     @NotBlank(message = "Loại chứng từ không được để trống")
     private String loaiChungTu;
     
-    @ExcelColumn(name = "Ngày chứng từ")
+    @ExcelColumn(name = "Ngày chứng từ", required = true, dataType = ExcelColumn.ColumnType.DATE,
+                pattern = "\\d{2}/\\d{2}/\\d{4}|\\d{4}-\\d{2}-\\d{2}",
+                description = "Ngày chứng từ (dd/MM/yyyy hoặc yyyy-MM-dd)", example = "01/01/2024", position = "E")
     @NotBlank(message = "Ngày chứng từ không được để trống")
     @Pattern(regexp = "\\d{2}/\\d{2}/\\d{4}|\\d{4}-\\d{2}-\\d{2}", 
              message = "Ngày chứng từ phải có định dạng dd/MM/yyyy hoặc yyyy-MM-dd")
     private String ngayChungTu;
     
-    @ExcelColumn(name = "Tên tập")
+    @ExcelColumn(name = "Tên tập", required = false, maxLength = 200, dataType = ExcelColumn.ColumnType.STRING,
+                description = "Tên tập/chồng hồ sơ", example = "Hồ sơ hợp đồng 2024", position = "F")
     private String tenTap;
     
-    @ExcelColumn(name = "Số lượng tập")
+    @ExcelColumn(name = "Số lượng tập", required = true, dataType = ExcelColumn.ColumnType.INTEGER,
+                description = "Số nguyên dương", example = "5", position = "G")
     @NotNull(message = "Số lượng tập không được để trống")
     @Positive(message = "Số lượng tập phải là số dương")
     private Integer soLuongTap;

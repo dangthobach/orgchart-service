@@ -78,3 +78,4 @@ public class Role {
                            id, name, description, isActive);
     }
 }
+

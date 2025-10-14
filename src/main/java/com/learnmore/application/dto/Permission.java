@@ -121,3 +121,4 @@ public class Permission {
                            id, name, code, type, resource);
     }
 }
+

@@ -1,6 +1,5 @@
 package com.learnmore.application.utils.sax;
 
-import com.learnmore.application.utils.ExcelColumn;
 import com.learnmore.application.utils.config.ExcelConfig;
 import com.learnmore.application.utils.converter.TypeConverter;
 import com.learnmore.application.utils.reflection.MethodHandleMapper;
@@ -16,7 +15,6 @@ import org.xml.sax.XMLReader;
 
 import javax.xml.parsers.SAXParserFactory;
 import java.io.InputStream;
-import java.lang.reflect.Field;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
@@ -32,7 +30,6 @@ public class TrueStreamingSAXProcessor<T> {
     private final ExcelConfig config;
     private final List<ValidationRule> validationRules;
     private final TypeConverter typeConverter;
-    private final Map<String, Field> fieldMapping;
     private final Consumer<List<T>> batchProcessor;
     private final MethodHandleMapper<T> methodHandleMapper;
 
@@ -49,7 +46,6 @@ public class TrueStreamingSAXProcessor<T> {
         this.config = config;
         this.validationRules = validationRules != null ? validationRules : new ArrayList<>();
         this.typeConverter = TypeConverter.getInstance();
-        this.fieldMapping = createFieldMapping();
         this.batchProcessor = batchProcessor;
         this.methodHandleMapper = MethodHandleMapper.forClass(beanClass);
         this.startTime = System.currentTimeMillis();
@@ -100,22 +96,7 @@ public class TrueStreamingSAXProcessor<T> {
         );
     }
     
-    /**
-     * Create field mapping từ ExcelColumn annotations
-     */
-    private Map<String, Field> createFieldMapping() {
-        Map<String, Field> mapping = new HashMap<>();
-        
-        for (Field field : beanClass.getDeclaredFields()) {
-            ExcelColumn annotation = field.getAnnotation(ExcelColumn.class);
-            if (annotation != null) {
-                field.setAccessible(true);
-                mapping.put(annotation.name(), field);
-            }
-        }
-        
-        return mapping;
-    }
+    // fieldMapping removed; MethodHandleMapper handles both Excel column names and direct field names
     
     /**
      * True streaming content handler - xử lý batch ngay, không tích lũy
@@ -298,11 +279,14 @@ public class TrueStreamingSAXProcessor<T> {
         private String findFieldNameByColumnIndex(int colIndex) {
             for (Map.Entry<String, Integer> entry : headerMapping.entrySet()) {
                 if (entry.getValue().equals(colIndex)) {
-                    // Find field by header name
-                    for (Map.Entry<String, Field> fieldEntry : fieldMapping.entrySet()) {
-                        if (fieldEntry.getKey().equals(entry.getKey())) {
-                            return fieldEntry.getKey();
-                        }
+                    String headerName = entry.getKey();
+                    // Prefer Excel header name if mapper knows it
+                    if (methodHandleMapper.hasField(headerName)) {
+                        return headerName;
+                    }
+                    // Fallback: if header equals actual field name
+                    if (methodHandleMapper.hasField(headerName)) {
+                        return headerName;
                     }
                 }
             }
@@ -313,10 +297,10 @@ public class TrueStreamingSAXProcessor<T> {
             try {
                 // Required fields validation
                 for (String requiredField : config.getRequiredFields()) {
-                    Field field = fieldMapping.get(requiredField);
-                    if (field != null) {
-                        field.setAccessible(true);
-                        Object value = field.get(instance);
+                    if (methodHandleMapper.hasField(requiredField)) {
+                        @SuppressWarnings("unchecked")
+                        T typedInstance = (T) instance;
+                        Object value = methodHandleMapper.getFieldValue(typedInstance, requiredField);
                         if (value == null || (value instanceof String && ((String) value).trim().isEmpty())) {
                             log.warn("Required field '{}' is empty at row {}", requiredField, rowNum);
                             errorCount.incrementAndGet();
@@ -326,10 +310,10 @@ public class TrueStreamingSAXProcessor<T> {
                 
                 // Unique fields validation (simple memory-based check for current batch)
                 for (String uniqueField : config.getUniqueFields()) {
-                    Field field = fieldMapping.get(uniqueField);
-                    if (field != null) {
-                        field.setAccessible(true);
-                        Object value = field.get(instance);
+                    if (methodHandleMapper.hasField(uniqueField)) {
+                        @SuppressWarnings("unchecked")
+                        T typedInstance = (T) instance;
+                        Object value = methodHandleMapper.getFieldValue(typedInstance, uniqueField);
                         if (value != null) {
                             String key = uniqueField + ":" + value.toString();
                             if (seenUniqueValues.contains(key)) {
@@ -347,10 +331,10 @@ public class TrueStreamingSAXProcessor<T> {
                 for (Map.Entry<String, ValidationRule> entry : config.getFieldValidationRules().entrySet()) {
                     String fieldName = entry.getKey();
                     ValidationRule rule = entry.getValue();
-                    Field field = fieldMapping.get(fieldName);
-                    if (field != null) {
-                        field.setAccessible(true);
-                        Object value = field.get(instance);
+                    if (methodHandleMapper.hasField(fieldName)) {
+                        @SuppressWarnings("unchecked")
+                        T typedInstance = (T) instance;
+                        Object value = methodHandleMapper.getFieldValue(typedInstance, fieldName);
                         if (value != null) {
                             var result = rule.validate(fieldName, value, rowNum, 0);
                             if (!result.isValid()) {

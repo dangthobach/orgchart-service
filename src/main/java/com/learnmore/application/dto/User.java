@@ -23,43 +23,55 @@ import java.time.LocalDateTime;
 public class User {
     
     @Id
-    @ExcelColumn(name = "ID")
+    @ExcelColumn(name = "ID", required = true, maxLength = 50, dataType = ExcelColumn.ColumnType.STRING, 
+                description = "Mã định danh người dùng", example = "USER001", position = "A")
     @Column(name = "id", nullable = false, unique = true)
     private String id;
     
-    @ExcelColumn(name = "Identity Card")
+    @ExcelColumn(name = "Identity Card", required = true, maxLength = 20, dataType = ExcelColumn.ColumnType.STRING,
+                description = "Số CMND/CCCD", example = "123456789", position = "B")
     @Column(name = "identity_card", nullable = false, unique = true, length = 20)
     private String identityCard;
     
-    @ExcelColumn(name = "First Name")
+    @ExcelColumn(name = "First Name", required = true, maxLength = 50, dataType = ExcelColumn.ColumnType.STRING,
+                description = "Tên", example = "Nguyễn Văn", position = "C")
     @Column(name = "first_name", nullable = false, length = 50)
     private String firstName;
     
-    @ExcelColumn(name = "Last Name")
+    @ExcelColumn(name = "Last Name", required = true, maxLength = 50, dataType = ExcelColumn.ColumnType.STRING,
+                description = "Họ", example = "A", position = "D")
     @Column(name = "last_name", nullable = false, length = 50)
     private String lastName;
     
-    @ExcelColumn(name = "Email")
+    @ExcelColumn(name = "Email", required = true, maxLength = 100, dataType = ExcelColumn.ColumnType.EMAIL,
+                description = "Email", example = "user@example.com", position = "E")
     @Column(name = "email", nullable = false, length = 100)
     private String email;
     
-    @ExcelColumn(name = "Phone Number")
+    @ExcelColumn(name = "Phone Number", required = false, maxLength = 20, dataType = ExcelColumn.ColumnType.PHONE,
+                description = "Số điện thoại", example = "0123456789", position = "F")
     @Column(name = "phone_number", length = 20)
     private String phoneNumber;
     
-    @ExcelColumn(name = "Birth Date")
+    @ExcelColumn(name = "Birth Date", required = false, dataType = ExcelColumn.ColumnType.DATE,
+                pattern = "\\d{2}/\\d{2}/\\d{4}|\\d{4}-\\d{2}-\\d{2}",
+                description = "Ngày sinh", example = "01/01/1990", position = "G")
     @Column(name = "birth_date")
     private LocalDate birthDate;
     
-    @ExcelColumn(name = "Salary")
+    @ExcelColumn(name = "Salary", required = false, dataType = ExcelColumn.ColumnType.DECIMAL,
+                description = "Lương", example = "5000000", position = "H")
     @Column(name = "salary")
     private Double salary;
     
-    @ExcelColumn(name = "Department")
+    @ExcelColumn(name = "Department", required = false, maxLength = 50, dataType = ExcelColumn.ColumnType.STRING,
+                description = "Phòng ban", example = "IT", position = "I")
     @Column(name = "department", length = 50)
     private String department;
     
-    @ExcelColumn(name = "Created At")
+    @ExcelColumn(name = "Created At", required = false, dataType = ExcelColumn.ColumnType.DATE,
+                pattern = "\\d{2}/\\d{2}/\\d{4}|\\d{4}-\\d{2}-\\d{2}",
+                description = "Ngày tạo", example = "01/01/2024", position = "J")
     @Column(name = "created_at")
     private LocalDateTime createdAt;
     
