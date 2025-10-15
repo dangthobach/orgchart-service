@@ -89,6 +89,11 @@ public class TrueStreamingSAXProcessor<T> {
         
         long processingTime = System.currentTimeMillis() - startTime;
         
+        // Throw if no data rows were processed
+        if (totalProcessed.get() == 0) {
+            throw new RuntimeException("Tập không có dữ liệu");
+        }
+        
         return new ProcessingResult(
             totalProcessed.get(), 
             totalErrors.get(), 
@@ -110,6 +115,7 @@ public class TrueStreamingSAXProcessor<T> {
         private Object currentInstance;
         private int currentRowNum = 0;
         private boolean headerProcessed = false;
+        private boolean rowHasValue = false;
         
         @Override
         public void startRow(int rowNum) {
@@ -122,6 +128,7 @@ public class TrueStreamingSAXProcessor<T> {
             
             // Create new instance for data rows using MethodHandle (5x faster)
             if (headerProcessed) {
+                rowHasValue = false;
                 try {
                     currentInstance = methodHandleMapper.createInstance();
                     
@@ -174,6 +181,12 @@ public class TrueStreamingSAXProcessor<T> {
             // Process completed data row
             if (headerProcessed && currentInstance != null) {
                 try {
+                    // Skip completely empty data rows
+                    if (!rowHasValue) {
+                        log.debug("Skipping empty row {}", rowNum);
+                        currentInstance = null;
+                        return;
+                    }
                     // ✅ INLINE maxRows VALIDATION (during streaming, NO buffering)
                     if (config.getMaxRows() > 0) {
                         int dataRowsProcessed = (int) totalProcessed.get() + 1; // +1 for current row
@@ -265,6 +278,9 @@ public class TrueStreamingSAXProcessor<T> {
                 Class<?> fieldType = methodHandleMapper.getFieldType(fieldName);
                 if (fieldType != null) {
                     // Convert and set value using MethodHandle (5x faster)
+                    if (formattedValue != null && !formattedValue.trim().isEmpty()) {
+                        rowHasValue = true;
+                    }
                     Object convertedValue = typeConverter.convert(formattedValue, fieldType);
                     @SuppressWarnings("unchecked")
                     T typedInstance = (T) currentInstance;

@@ -117,8 +117,35 @@ public class MigrationController {
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Invalid file format. Only .xlsx and .xls files are supported"));
         }
+
+        // Enforce file size limit: 10MB
+        final long MAX_SIZE_BYTES = 10L * 1024 * 1024; // 10MB
+        if (file.getSize() > MAX_SIZE_BYTES) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of(
+                            "error", "File size exceeds 10MB limit",
+                            "sizeBytes", file.getSize()
+                    ));
+        }
         
         try {
+            // Fast dimension-based validations (fail fast if possible)
+            // - Ensure there is at least one data row (excluding header)
+            // - Ensure number of data rows does not exceed 1000
+            // Use a dedicated stream for early validation (will be consumed)
+            try (var earlyStream = file.getInputStream()) {
+                int dataRows = com.learnmore.application.utils.validation.ExcelDimensionValidator
+                        .validateRowCount(earlyStream, 1000, /*startRow (header rows)*/ 1);
+                if (dataRows == 0) {
+                    return ResponseEntity.badRequest()
+                            .body(Map.of("error", "Tập không có dữ liệu"));
+                }
+            } catch (com.learnmore.application.utils.exception.ExcelProcessException e) {
+                log.warn("Early validation failed: {}", e.getMessage());
+                return ResponseEntity.badRequest()
+                        .body(Map.of("error", e.getMessage()));
+            }
+
             // Start async migration
             CompletableFuture<MigrationResultDTO> future = migrationOrchestrationService.performFullMigrationAsync(
                     file.getInputStream(), 
