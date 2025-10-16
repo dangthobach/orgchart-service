@@ -2,6 +2,9 @@ package com.learnmore.controller;
 
 import com.learnmore.application.dto.migration.MigrationResultDTO;
 import com.learnmore.application.service.migration.MigrationOrchestrationService;
+import com.learnmore.application.service.EnhancedExcelTemplateValidationService;
+import com.learnmore.application.utils.validation.TemplateValidationResult;
+import com.learnmore.application.utils.exception.ExcelProcessException;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -29,6 +32,7 @@ import java.util.concurrent.CompletableFuture;
 public class MigrationController {
     
     private final MigrationOrchestrationService migrationOrchestrationService;
+    private final EnhancedExcelTemplateValidationService enhancedExcelTemplateValidationService;
     
     /**
      * Upload và thực hiện migration Excel file (synchronous)
@@ -146,8 +150,20 @@ public class MigrationController {
                         .body(Map.of("error", e.getMessage()));
             }
 
+            // Template validation based on @ExcelColumn (fail fast if invalid)
+            try (var validationStream = file.getInputStream()) {
+                TemplateValidationResult templateResult = enhancedExcelTemplateValidationService
+                        .validateMigrationExcel(validationStream);
+                if (!templateResult.isValid()) {
+                    String firstError = (templateResult.getErrors() != null && !templateResult.getErrors().isEmpty())
+                            ? templateResult.getErrors().get(0).getMessage()
+                            : "Template không hợp lệ";
+                    throw new ExcelProcessException("File không đúng template: " + firstError);
+                }
+            }
+
             // Start async migration
-            CompletableFuture<MigrationResultDTO> future = migrationOrchestrationService.performFullMigrationAsync(
+            migrationOrchestrationService.performFullMigrationAsync(
                     file.getInputStream(), 
                     file.getOriginalFilename(), 
                     createdBy,
@@ -166,6 +182,11 @@ public class MigrationController {
             log.error("Failed to read uploaded file: {}", e.getMessage(), e);
             return ResponseEntity.badRequest()
                     .body(Map.of("error", "Failed to read uploaded file: " + e.getMessage()));
+        } catch (ExcelProcessException e) {
+            // Fast-fail template validation or processing exception
+            log.warn("Template validation failed: {}", e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(Map.of("error", e.getMessage()));
         } catch (Exception e) {
             log.error("Failed to start async migration: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
