@@ -29,18 +29,26 @@ public class TypeConverter {
     private final ConcurrentMap<String, Object> conversionCache = new ConcurrentHashMap<>();
     private final ConcurrentMap<Class<?>, Function<String, Object>> converterMap = new ConcurrentHashMap<>();
     
-    // Date formatters
+    // Date formatters - Enhanced with more patterns
     private final DateTimeFormatter[] dateFormatters = {
         DateTimeFormatter.ofPattern("yyyy-MM-dd"),
         DateTimeFormatter.ofPattern("yyyy/MM/dd"),
         DateTimeFormatter.ofPattern("dd/MM/yyyy"),
         DateTimeFormatter.ofPattern("dd-MM-yyyy"),
         DateTimeFormatter.ofPattern("MM/dd/yyyy"),
+        DateTimeFormatter.ofPattern("MM-yyyy"),       // Month-Year format
+        DateTimeFormatter.ofPattern("M/d/yyyy"),      // Single digit month/day
+        DateTimeFormatter.ofPattern("MM/d/yyyy"),     // Single digit day
+        DateTimeFormatter.ofPattern("M/dd/yyyy"),    // Single digit month
         DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"),
         DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm:ss"),
         DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm:ss"),
         DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss"),
-        DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm:ss")
+        DateTimeFormatter.ofPattern("MM/dd/yyyy HH:mm:ss"),
+        DateTimeFormatter.ofPattern("MM-yyyy HH:mm:ss"), // Month-Year with time
+        DateTimeFormatter.ofPattern("M/d/yyyy HH:mm:ss"),
+        DateTimeFormatter.ofPattern("MM/d/yyyy HH:mm:ss"),
+        DateTimeFormatter.ofPattern("M/dd/yyyy HH:mm:ss")
     };
     
     // Statistics

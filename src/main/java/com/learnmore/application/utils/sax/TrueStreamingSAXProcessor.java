@@ -68,10 +68,15 @@ public class TrueStreamingSAXProcessor<T> {
             // True streaming content handler - xử lý từng batch ngay
             TrueStreamingContentHandler contentHandler = new TrueStreamingContentHandler();
             
-            // Setup SAX parser
+            // Setup SAX parser with proper date formatting
             XMLReader xmlReader = SAXParserFactory.newInstance().newSAXParser().getXMLReader();
+            
+            // Create DataFormatter with proper date formatting
+            DataFormatter dataFormatter = new DataFormatter();
+            dataFormatter.setUseCachedValuesForFormulaCells(false);
+            
             XSSFSheetXMLHandler sheetHandler = new XSSFSheetXMLHandler(
-                stylesTable, sharedStringsTable, contentHandler, new DataFormatter(), false
+                stylesTable, sharedStringsTable, contentHandler, dataFormatter, false
             );
             xmlReader.setContentHandler(sheetHandler);
             
@@ -281,7 +286,11 @@ public class TrueStreamingSAXProcessor<T> {
                     if (formattedValue != null && !formattedValue.trim().isEmpty()) {
                         rowHasValue = true;
                     }
-                    Object convertedValue = typeConverter.convert(formattedValue, fieldType);
+                    
+                    // ✅ ENHANCED DATE PROCESSING: Handle date formatting issues
+                    String processedValue = processDateValue(formattedValue, fieldType);
+                    Object convertedValue = typeConverter.convert(processedValue, fieldType);
+                    
                     @SuppressWarnings("unchecked")
                     T typedInstance = (T) currentInstance;
                     methodHandleMapper.setFieldValue(typedInstance, fieldName, convertedValue);
@@ -290,6 +299,60 @@ public class TrueStreamingSAXProcessor<T> {
             } catch (Exception e) {
                 log.debug("Failed to set field {} with value '{}': {}", fieldName, formattedValue, e.getMessage());
             }
+        }
+        
+        /**
+         * Process date values to handle Excel date formatting issues
+         */
+        private String processDateValue(String formattedValue, Class<?> fieldType) {
+            if (formattedValue == null || formattedValue.trim().isEmpty()) {
+                return formattedValue;
+            }
+            
+            // Only process if field type is date-related
+            if (fieldType == String.class && isDateField(formattedValue)) {
+                // Handle cases like "11/15/25" -> "11/15/2025"
+                if (formattedValue.matches("\\d{1,2}/\\d{1,2}/\\d{2}")) {
+                    String[] parts = formattedValue.split("/");
+                    if (parts.length == 3) {
+                        String month = parts[0];
+                        String day = parts[1];
+                        String year = parts[2];
+                        
+                        // Convert 2-digit year to 4-digit year
+                        if (year.length() == 2) {
+                            int yearInt = Integer.parseInt(year);
+                            if (yearInt >= 0 && yearInt <= 99) {
+                                // Assume years 00-30 are 2000-2030, 31-99 are 1931-1999
+                                if (yearInt <= 30) {
+                                    year = "20" + year;
+                                } else {
+                                    year = "19" + year;
+                                }
+                            }
+                        }
+                        
+                        return month + "/" + day + "/" + year;
+                    }
+                }
+            }
+            
+            return formattedValue;
+        }
+        
+        /**
+         * Check if a value looks like a date
+         */
+        private boolean isDateField(String value) {
+            if (value == null || value.trim().isEmpty()) {
+                return false;
+            }
+            
+            // Check for common date patterns
+            return value.matches("\\d{1,2}/\\d{1,2}/\\d{2,4}") ||  // MM/dd/yyyy or MM/dd/yy
+                   value.matches("\\d{1,2}-\\d{1,2}-\\d{2,4}") ||  // MM-dd-yyyy or MM-dd-yy
+                   value.matches("\\d{4}-\\d{1,2}-\\d{1,2}") ||   // yyyy-MM-dd
+                   value.matches("\\d{1,2}-\\d{4}");              // MM-yyyy
         }
         
         private String findFieldNameByColumnIndex(int colIndex) {
