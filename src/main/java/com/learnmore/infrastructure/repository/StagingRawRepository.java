@@ -8,9 +8,10 @@ import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.UUID;
 
 @Repository
-public interface StagingRawRepository extends JpaRepository<StagingRaw, Long> {
+public interface StagingRawRepository extends JpaRepository<StagingRaw, UUID> {
     
     List<StagingRaw> findByJobIdOrderByRowNum(String jobId);
     
@@ -35,4 +36,11 @@ public interface StagingRawRepository extends JpaRepository<StagingRaw, Long> {
     List<StagingRaw> findValidRecordsPaginated(@Param("jobId") String jobId, 
                                                @Param("limit") int limit, 
                                                @Param("offset") int offset);
+    
+    // Methods for error handling with new errorMessage and errorCode columns
+    @Query("SELECT sr FROM StagingRaw sr WHERE sr.jobId = :jobId AND sr.errorMessage IS NOT NULL ORDER BY sr.rowNum")
+    List<StagingRaw> findByJobIdAndErrorMessageIsNotNull(@Param("jobId") String jobId);
+    
+    @Query("SELECT COUNT(sr) FROM StagingRaw sr WHERE sr.jobId = :jobId AND sr.errorMessage IS NOT NULL")
+    Long countByJobIdAndErrorMessageIsNotNull(@Param("jobId") String jobId);
 }

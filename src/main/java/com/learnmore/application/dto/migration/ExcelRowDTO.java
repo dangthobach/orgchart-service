@@ -1,5 +1,7 @@
 package com.learnmore.application.dto.migration;
 
+import java.util.UUID;
+
 import com.learnmore.application.utils.ExcelColumn;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -26,21 +28,21 @@ public class ExcelRowDTO {
     @NotBlank(message = "Kho VPBank không được để trống")
     private String khoVpbank;
     
-    @ExcelColumn(name = "Mã đơn vị", required = true, maxLength = 20, dataType = ExcelColumn.ColumnType.STRING,
+    @ExcelColumn(name = "Mã Đơn Vị", required = true, maxLength = 20, dataType = ExcelColumn.ColumnType.STRING,
                 description = "Mã đơn vị chủ quản", example = "DV001", position = "B")
     @NotBlank(message = "Mã đơn vị không được để trống")
     private String maDonVi;
     
-    @ExcelColumn(name = "Trách nhiệm bàn giao", required = false, maxLength = 100, dataType = ExcelColumn.ColumnType.STRING,
+    @ExcelColumn(name = "Trách Nhiệm Bàn Giao", required = false, maxLength = 100, dataType = ExcelColumn.ColumnType.STRING,
                 description = "Bộ phận chịu trách nhiệm", example = "Phòng Tài chính", position = "C")
     private String trachNhiemBanGiao;
     
-    @ExcelColumn(name = "Loại chứng từ", required = true, maxLength = 100, dataType = ExcelColumn.ColumnType.STRING,
+    @ExcelColumn(name = "Loại Chứng Từ", required = true, maxLength = 100, dataType = ExcelColumn.ColumnType.STRING,
                 description = "Loại chứng từ tài liệu", example = "Hợp đồng", position = "D")
     @NotBlank(message = "Loại chứng từ không được để trống")
     private String loaiChungTu;
     
-    @ExcelColumn(name = "Ngày chứng từ", required = true, dataType = ExcelColumn.ColumnType.DATE,
+    @ExcelColumn(name = "Ngày Chứng Từ", required = true, dataType = ExcelColumn.ColumnType.DATE,
                 pattern = "\\d{2}/\\d{2}/\\d{4}|\\d{4}-\\d{2}-\\d{2}",
                 description = "Ngày chứng từ (dd/MM/yyyy hoặc yyyy-MM-dd)", example = "01/01/2024", position = "E")
     @NotBlank(message = "Ngày chứng từ không được để trống")
@@ -52,7 +54,7 @@ public class ExcelRowDTO {
                 description = "Tên tập/chồng hồ sơ", example = "Hồ sơ hợp đồng 2024", position = "F")
     private String tenTap;
     
-    @ExcelColumn(name = "Số lượng tập", required = true, dataType = ExcelColumn.ColumnType.INTEGER,
+    @ExcelColumn(name = "Số Lượng Tập", required = true, dataType = ExcelColumn.ColumnType.INTEGER,
                 description = "Số nguyên dương", example = "5", position = "G")
     @NotNull(message = "Số lượng tập không được để trống")
     @Positive(message = "Số lượng tập phải là số dương")

@@ -7,6 +7,7 @@ import lombok.NoArgsConstructor;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 /**
  * Bảng staging lưu trữ dữ liệu thô từ Excel
@@ -24,8 +25,7 @@ import java.time.LocalDateTime;
 public class StagingRaw {
     
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private UUID id;
     
     @Column(name = "job_id", length = 50, nullable = false)
     private String jobId;
@@ -143,4 +143,11 @@ public class StagingRaw {
     // Lỗi parse nếu có
     @Column(name = "parse_errors", length = 4000)
     private String parseErrors;
+    
+    // Thông tin lỗi validation
+    @Column(name = "error_message", length = 4000)
+    private String errorMessage;
+    
+    @Column(name = "error_code", length = 1000)
+    private String errorCode;
 }

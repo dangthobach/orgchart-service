@@ -8,7 +8,14 @@
       "Bash(find:*)",
       "Bash(git add:*)",
       "Bash(mvn dependency:*)",
-      "Bash(rm:*)"
+      "Bash(rm:*)",
+      "Bash(cat:*)",
+      "Bash(awk '{print $NF}')",
+      "Bash(java -jar:*)",
+      "Bash(findstr:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []

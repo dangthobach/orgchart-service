@@ -2,6 +2,7 @@ package com.learnmore.controller;
 
 import com.learnmore.application.dto.migration.MigrationResultDTO;
 import com.learnmore.application.service.migration.MigrationOrchestrationService;
+import com.learnmore.application.service.migration.ExcelIngestService;
 import com.learnmore.application.service.EnhancedExcelTemplateValidationService;
 import com.learnmore.application.utils.validation.TemplateValidationResult;
 import com.learnmore.application.utils.exception.ExcelProcessException;
@@ -10,6 +11,9 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.io.Resource;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -18,7 +22,6 @@ import org.springframework.web.multipart.MultipartFile;
 import jakarta.validation.constraints.NotBlank;
 import java.io.IOException;
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 /**
  * REST Controller cho Excel Migration API
@@ -32,6 +35,7 @@ import java.util.concurrent.CompletableFuture;
 public class MigrationController {
     
     private final MigrationOrchestrationService migrationOrchestrationService;
+    private final ExcelIngestService excelIngestService;
     private final EnhancedExcelTemplateValidationService enhancedExcelTemplateValidationService;
     
     /**
@@ -310,6 +314,79 @@ public class MigrationController {
             log.error("Failed to get system metrics: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
                     .body(Map.of("error", "Failed to get system metrics: " + e.getMessage()));
+        }
+    }
+    
+    /**
+     * Download error file for a migration job
+     */
+    @GetMapping("/job/{jobId}/errors/download")
+    @Operation(summary = "Download error file", 
+               description = "Download Excel file containing validation errors with errorMessage and errorCode columns")
+    public ResponseEntity<Resource> downloadErrorFile(
+            @Parameter(description = "Migration job ID") @PathVariable @NotBlank String jobId) {
+        
+        try {
+            // Check if there are any errors
+            if (!excelIngestService.hasErrorData(jobId)) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Generate error file
+            var errorFileStream = excelIngestService.generateErrorFile(jobId);
+            byte[] errorFileBytes = errorFileStream.toByteArray();
+            
+            if (errorFileBytes.length == 0) {
+                return ResponseEntity.notFound().build();
+            }
+            
+            // Create resource
+            ByteArrayResource resource = new ByteArrayResource(errorFileBytes);
+            
+            // Set headers for file download
+            HttpHeaders headers = new HttpHeaders();
+            headers.add(HttpHeaders.CONTENT_DISPOSITION, 
+                      "attachment; filename=\"errors_" + jobId + ".xlsx\"");
+            headers.add(HttpHeaders.CONTENT_TYPE, 
+                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+            
+            log.info("Generated error file for JobId: {}, Size: {} bytes", jobId, errorFileBytes.length);
+            
+            return ResponseEntity.ok()
+                    .headers(headers)
+                    .contentLength(errorFileBytes.length)
+                    .body(resource);
+            
+        } catch (Exception e) {
+            log.error("Failed to generate error file for jobId: {}, Error: {}", jobId, e.getMessage(), e);
+            return ResponseEntity.internalServerError().build();
+        }
+    }
+    
+    /**
+     * Get error statistics for a migration job
+     */
+    @GetMapping("/job/{jobId}/errors/stats")
+    @Operation(summary = "Get error statistics", 
+               description = "Get statistics about validation errors for a migration job")
+    public ResponseEntity<Map<String, Object>> getErrorStatistics(
+            @Parameter(description = "Migration job ID") @PathVariable @NotBlank String jobId) {
+        
+        try {
+            long errorCount = excelIngestService.getErrorCount(jobId);
+            boolean hasErrors = excelIngestService.hasErrorData(jobId);
+            
+            return ResponseEntity.ok(Map.of(
+                    "jobId", jobId,
+                    "hasErrors", hasErrors,
+                    "errorCount", errorCount,
+                    "errorFileAvailable", hasErrors
+            ));
+            
+        } catch (Exception e) {
+            log.error("Failed to get error statistics for jobId: {}, Error: {}", jobId, e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Failed to get error statistics: " + e.getMessage()));
         }
     }
     
