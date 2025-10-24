@@ -58,6 +58,17 @@ public class ExcelDimensionValidatorTest {
         });
     }
     
+    @Test
+    public void testValidateAllSheets_InvalidExcelData() {
+        // Test với data không phải Excel file
+        ByteArrayInputStream inputStream = new ByteArrayInputStream("fake excel".getBytes());
+
+        // Nên throw exception vì không phải Excel file hợp lệ
+        assertThrows(ExcelProcessException.class, () -> {
+            ExcelDimensionValidator.validateAllSheets(inputStream, 1000, 1);
+        });
+    }
+
     /**
      * Test helper method để tạo mock Excel file
      * Note: Để test đầy đủ cần Excel file thật với dimension

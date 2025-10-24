@@ -81,6 +81,61 @@ public class ExcelDimensionValidator {
     }
     
     /**
+     * Validate row counts for ALL sheets in Excel file
+     *
+     * @param inputStream Excel file input stream (will be consumed)
+     * @param maxRowsPerSheet maximum rows allowed per sheet
+     * @param startRow row bắt đầu đọc dữ liệu (0-based)
+     * @return Map of sheet name to data row count
+     * @throws ExcelProcessException if any sheet exceeds the limit
+     */
+    public static java.util.Map<String, Integer> validateAllSheets(InputStream inputStream, int maxRowsPerSheet, int startRow)
+            throws ExcelProcessException {
+
+        try {
+            java.util.Map<String, Integer> sheetRowCounts = new java.util.HashMap<>();
+            java.util.List<String> violatingSheets = new java.util.ArrayList<>();
+
+            // Read all sheet dimensions
+            java.util.Map<String, DimensionInfo> allDimensions = readAllSheetDimensions(inputStream);
+
+            for (java.util.Map.Entry<String, DimensionInfo> entry : allDimensions.entrySet()) {
+                String sheetName = entry.getKey();
+                DimensionInfo dimensionInfo = entry.getValue();
+
+                // Calculate actual data rows (excluding header rows)
+                int totalRows = dimensionInfo.getLastRow() - dimensionInfo.getFirstRow() + 1;
+                int dataRows = Math.max(0, totalRows - startRow);
+
+                sheetRowCounts.put(sheetName, dataRows);
+
+                log.info("Sheet '{}' dimension: {}:{}, Total rows: {}, Data rows: {}, Max allowed: {}",
+                        sheetName, dimensionInfo.getFirstCellRef(), dimensionInfo.getLastCellRef(),
+                        totalRows, dataRows, maxRowsPerSheet);
+
+                // Check if sheet violates limit
+                if (dataRows > maxRowsPerSheet) {
+                    violatingSheets.add(String.format("%s (%d rows)", sheetName, dataRows));
+                }
+            }
+
+            // Throw exception if any sheet violates the limit
+            if (!violatingSheets.isEmpty()) {
+                throw new ExcelProcessException(String.format(
+                    "Các sheet sau vượt quá giới hạn %d bản ghi: %s. Vui lòng chia nhỏ file hoặc tăng giới hạn xử lý.",
+                    maxRowsPerSheet, String.join(", ", violatingSheets)));
+            }
+
+            return sheetRowCounts;
+
+        } catch (ExcelProcessException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new ExcelProcessException("Không thể đọc dimension từ các sheet: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * ✅ STREAMING OPTIMIZED: Read dimension directly from stream without loading into memory
      *
      * BEFORE FIX: byte[] streamData = inputStream.readAllBytes(); // ❌ 500MB-2GB in memory!
@@ -104,6 +159,34 @@ public class ExcelDimensionValidator {
 
             throw new ExcelProcessException("Không tìm thấy sheet nào trong Excel file");
         }
+    }
+
+    /**
+     * Read dimensions from ALL sheets in Excel file
+     */
+    private static java.util.Map<String, DimensionInfo> readAllSheetDimensions(InputStream inputStream) throws Exception {
+        java.util.Map<String, DimensionInfo> dimensionMap = new java.util.LinkedHashMap<>();
+
+        // ✅ OPTIMIZED: Open OPCPackage directly from stream (NO memory buffering)
+        try (OPCPackage opcPackage = OPCPackage.open(inputStream)) {
+            XSSFReader xssfReader = new XSSFReader(opcPackage);
+
+            // Iterate through all sheets
+            XSSFReader.SheetIterator sheetIterator = (XSSFReader.SheetIterator) xssfReader.getSheetsData();
+            while (sheetIterator.hasNext()) {
+                try (InputStream sheetInputStream = sheetIterator.next()) {
+                    String sheetName = sheetIterator.getSheetName();
+                    DimensionInfo dimensionInfo = parseDimensionFromSheet(sheetInputStream);
+                    dimensionMap.put(sheetName, dimensionInfo);
+                }
+            }
+
+            if (dimensionMap.isEmpty()) {
+                throw new ExcelProcessException("Không tìm thấy sheet nào trong Excel file");
+            }
+        }
+
+        return dimensionMap;
     }
     
     private static DimensionInfo parseDimensionFromSheet(InputStream sheetInputStream) throws Exception {

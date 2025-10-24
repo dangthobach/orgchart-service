@@ -138,16 +138,25 @@ public class MigrationController {
         
         try {
             // Fast dimension-based validations (fail fast if possible)
-            // - Ensure there is at least one data row (excluding header)
-            // - Ensure number of data rows does not exceed 1000
+            // - Validate row counts for ALL sheets in Excel file
+            // - Each sheet must have at least 1 data row and not exceed 1000 rows
             // Use a dedicated stream for early validation (will be consumed)
             try (var earlyStream = file.getInputStream()) {
-                int dataRows = com.learnmore.application.utils.validation.ExcelDimensionValidator
-                        .validateRowCount(earlyStream, 1000, /*startRow (header rows)*/ 1);
-                if (dataRows == 0) {
+                Map<String, Integer> sheetRowCounts = com.learnmore.application.utils.validation.ExcelDimensionValidator
+                        .validateAllSheets(earlyStream, 1000, /*startRow (header rows)*/ 1);
+
+                // Check if any sheet has no data
+                boolean hasEmptySheet = sheetRowCounts.values().stream().anyMatch(count -> count == 0);
+                if (hasEmptySheet) {
+                    String emptySheets = sheetRowCounts.entrySet().stream()
+                            .filter(e -> e.getValue() == 0)
+                            .map(Map.Entry::getKey)
+                            .collect(java.util.stream.Collectors.joining(", "));
                     return ResponseEntity.badRequest()
-                            .body(Map.of("error", "Tập không có dữ liệu"));
+                            .body(Map.of("error", "Các sheet sau không có dữ liệu: " + emptySheets));
                 }
+
+                log.info("Multi-sheet validation passed. Sheet row counts: {}", sheetRowCounts);
             } catch (com.learnmore.application.utils.exception.ExcelProcessException e) {
                 log.warn("Early validation failed: {}", e.getMessage());
                 return ResponseEntity.badRequest()
