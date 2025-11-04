@@ -131,6 +131,19 @@
             <groupId>io.netty</groupId>
             <artifactId>netty-buffer</artifactId>
         </dependency>
+
+        <!-- Spring Retry for resilience -->
+        <dependency>
+            <groupId>org.springframework.retry</groupId>
+            <artifactId>spring-retry</artifactId>
+        </dependency>
+
+        <!-- Resilience4j for circuit breaker and rate limiting -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+            <version>2.1.0</version>
+        </dependency>
     </dependencies>
 
     <build>

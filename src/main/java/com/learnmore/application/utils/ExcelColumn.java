@@ -8,9 +8,19 @@ public @interface ExcelColumn {
 
     String name();
     String numberFormat() default "General";
-    
+
+    /**
+     * Column index (0-based)
+     */
+    int index() default -1;
+
+    /**
+     * Date format for date columns
+     */
+    String dateFormat() default "";
+
     // ========== VALIDATION ATTRIBUTES ==========
-    
+
     /**
      * Có bắt buộc không
      */

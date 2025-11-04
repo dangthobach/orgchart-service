@@ -1,0 +1,242 @@
+# ================================================================
+# Validation Rules Configuration
+# Declarative validation rules for each sheet type
+# ================================================================
+
+rules:
+  # ----------------------------------------------------------------
+  # HopDong Validation Rules
+  # ----------------------------------------------------------------
+  hop_dong_required_fields:
+    type: REQUIRED_FIELDS
+    enabled: true
+    description: "Validate required fields for HopDong sheet"
+    fields:
+      - khoVpbank
+      - maDonVi
+      - soHopDong
+      - soLuongTap
+      - ngayGiaiNgan
+      - loaiHoSo
+      - phanHanCapTd
+      - maThung
+
+  hop_dong_date_formats:
+    type: DATE_FORMAT
+    enabled: true
+    description: "Validate date formats"
+    dateFormat: "yyyy-MM-dd"
+    fields:
+      - ngayPhaiBanGiao
+      - ngayBanGiao
+      - ngayGiaiNgan
+      - ngayDenHan
+      - ngayDuKienTieuHuy
+      - ngayNhapKhoVpbank
+      - ngayChuyenKhoCrown
+
+  hop_dong_enum_values:
+    type: ENUM_VALUES
+    enabled: true
+    description: "Validate enum field values"
+    rules:
+      loaiHoSo:
+        allowedValues: [LD, MD, CC, OD, TTK, HDHM, TSBD, KSSV, "Bao thanh toán", "Biên nhận thế chấp"]
+      phanHanCapTd:
+        allowedValues: ["Vĩnh viễn", "Ngắn hạn", "Trung hạn", "Dài hạn"]
+
+  hop_dong_business_logic:
+    type: BUSINESS_LOGIC
+    enabled: true
+    description: "Business logic validation"
+    rules:
+      - name: "validate_destruction_date"
+        description: "Ngày dự kiến tiêu hủy must match phanHanCapTd"
+        field: "ngayDuKienTieuHuy"
+        customValidator: "HopDongBusinessRuleValidator.validateDestructionDate"
+
+      - name: "validate_ma_thung_format"
+        description: "Mã thùng: chỉ chữ in hoa, số, dấu gạch dưới"
+        field: "maThung"
+        pattern: "^[A-Z0-9_]+$"
+
+      - name: "validate_thoi_han_cap_td"
+        description: "Thời hạn cấp TD phải là số nguyên dương"
+        field: "thoiHanCapTd"
+        dataType: "INTEGER_POSITIVE"
+
+  hop_dong_duplicate_check:
+    type: DUPLICATE_CHECK
+    enabled: true
+    description: "Check duplicate within file and DB"
+    rules:
+      - condition: "loaiHoSo IN (LD,MD,OD,HDHM,KSSV,Bao thanh toán,Biên nhận thế chấp)"
+        businessKey: ["soHopDong", "loaiHoSo", "ngayGiaiNgan"]
+
+      - condition: "loaiHoSo IN (CC,TSBD)"
+        businessKey: ["soHopDong", "loaiHoSo", "soCif"]
+
+      - condition: "loaiHoSo = TTK"
+        businessKey: ["soHopDong", "loaiHoSo", "soCif", "maDonVi", "ngayGiaiNgan"]
+
+  hop_dong_master_references:
+    type: MASTER_REFERENCE
+    enabled: true
+    description: "Validate references to master tables"
+    references:
+      - field: "khoVpbank"
+        masterTable: "warehouse"
+        masterColumn: "code"
+        condition: "is_active = true"
+
+      - field: "maDonVi"
+        masterTable: "unit"
+        masterColumn: "code"
+        condition: "is_active = true"
+
+  # ----------------------------------------------------------------
+  # CIF Validation Rules
+  # ----------------------------------------------------------------
+  cif_required_fields:
+    type: REQUIRED_FIELDS
+    enabled: true
+    description: "Validate required fields for CIF sheet"
+    fields:
+      - khoVpbank
+      - maDonVi
+      - soCif
+      - soLuongTap
+      - ngayGiaiNgan
+      - loaiHoSo
+      - luongHoSo
+      - phanHanCapTd
+      - maThung
+
+  cif_date_formats:
+    type: DATE_FORMAT
+    enabled: true
+    description: "Validate date formats"
+    dateFormat: "yyyy-MM-dd"
+    fields:
+      - ngayPhaiBanGiao
+      - ngayBanGiao
+      - ngayGiaiNgan
+      - ngayNhapKhoVpbank
+      - ngayChuyenKhoCrown
+
+  cif_enum_values:
+    type: ENUM_VALUES
+    enabled: true
+    description: "Validate enum field values"
+    rules:
+      loaiHoSo:
+        allowedValues: ["PASS TTN", "SCF VEERFIN", "Trình cấp TD không qua CPC", "Hồ sơ mở TKTT nhưng không giải ngân"]
+      luongHoSo:
+        allowedValues: ["HSTD thường"]
+      phanHanCapTd:
+        allowedValues: ["Vĩnh viễn"]
+
+  cif_business_logic:
+    type: BUSINESS_LOGIC
+    enabled: true
+    description: "Business logic validation"
+    rules:
+      - name: "validate_ma_thung_format"
+        description: "Mã thùng: chỉ chữ in hoa, số, dấu gạch dưới"
+        field: "maThung"
+        pattern: "^[A-Z0-9_]+$"
+
+  cif_duplicate_check:
+    type: DUPLICATE_CHECK
+    enabled: true
+    description: "Check duplicate: CIF + Ngày giải ngân + Loại HS"
+    rules:
+      - businessKey: ["soCif", "ngayGiaiNgan", "loaiHoSo"]
+
+  cif_master_references:
+    type: MASTER_REFERENCE
+    enabled: true
+    description: "Validate references to master tables"
+    references:
+      - field: "khoVpbank"
+        masterTable: "warehouse"
+        masterColumn: "code"
+        condition: "is_active = true"
+
+  # ----------------------------------------------------------------
+  # Tap Validation Rules
+  # ----------------------------------------------------------------
+  tap_required_fields:
+    type: REQUIRED_FIELDS
+    enabled: true
+    description: "Validate required fields for Tap sheet"
+    fields:
+      - khoVpbank
+      - maDonVi
+      - trachNhiemBanGiao
+      - thangPhatSinh
+      - soLuongTap
+      - loaiHoSo
+      - luongHoSo
+      - phanHanCapTd
+      - ngayDuKienTieuHuy
+      - sanPham
+      - maThung
+
+  tap_date_formats:
+    type: DATE_FORMAT
+    enabled: true
+    description: "Validate date formats"
+    dateFormat: "yyyy-MM-dd"
+    fields:
+      - ngayPhaiBanGiao
+      - ngayBanGiao
+      - ngayDuKienTieuHuy
+      - ngayNhapKhoVpbank
+      - ngayChuyenKhoCrown
+
+  tap_enum_values:
+    type: ENUM_VALUES
+    enabled: true
+    description: "Validate enum field values"
+    rules:
+      loaiHoSo:
+        allowedValues: ["KSSV"]
+      luongHoSo:
+        allowedValues: ["HSTD thường"]
+      phanHanCapTd:
+        allowedValues: ["Vĩnh viễn"]
+      sanPham:
+        allowedValues: ["KSSV"]
+
+  tap_business_logic:
+    type: BUSINESS_LOGIC
+    enabled: true
+    description: "Business logic validation"
+    rules:
+      - name: "validate_destruction_date_9999"
+        description: "Ngày dự kiến tiêu hủy must be 31-Dec-9999"
+        field: "ngayDuKienTieuHuy"
+        customValidator: "TapBusinessRuleValidator.validateDestructionDate9999"
+
+      - name: "validate_ma_thung_format"
+        description: "Mã thùng: chỉ chữ in hoa, số, dấu gạch dưới"
+        field: "maThung"
+        pattern: "^[A-Z0-9_]+$"
+
+  tap_duplicate_check:
+    type: DUPLICATE_CHECK
+    enabled: true
+    description: "Check duplicate: Mã DV + TNBG + Tháng PS + Sản phẩm"
+    rules:
+      - businessKey: ["maDonVi", "trachNhiemBanGiao", "thangPhatSinh", "sanPham"]
+
+  tap_master_references:
+    type: MASTER_REFERENCE
+    enabled: true
+    description: "Validate references to master tables"
+    references:
+      - field: "khoVpbank"
+        masterTable: "warehouse"
+        masterColumn: "code"
+        condition: "is_active = true"

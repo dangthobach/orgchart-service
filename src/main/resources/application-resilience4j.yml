@@ -1,0 +1,32 @@
+resilience4j:
+  circuitbreaker:
+    instances:
+      multiSheetMigration:
+        slidingWindowSize: 10
+        permittedNumberOfCallsInHalfOpenState: 3
+        waitDurationInOpenState: 30s
+        failureRateThreshold: 50
+        slowCallRateThreshold: 100
+        slowCallDurationThreshold: 60s
+        recordExceptions:
+          - java.lang.Exception
+        ignoreExceptions:
+          - java.lang.IllegalArgumentException
+
+  ratelimiter:
+    instances:
+      multiSheetMigration:
+        limitForPeriod: 10
+        limitRefreshPeriod: 1m
+        timeoutDuration: 5s
+
+  retry:
+    instances:
+      multiSheetMigration:
+        maxAttempts: 3
+        waitDuration: 5s
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - org.springframework.dao.TransientDataAccessException
+          - org.springframework.dao.QueryTimeoutException

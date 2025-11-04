@@ -1,0 +1,131 @@
+# ================================================================
+# Multi-Sheet Migration Configuration
+# No-code configuration for sheet processing
+# ================================================================
+
+sheets:
+  # ----------------------------------------------------------------
+  # Sheet 1: HSBG_theo_hop_dong
+  # ----------------------------------------------------------------
+  - name: "HSBG_theo_hop_dong"
+    enabled: true
+    order: 1
+    description: "Hồ sơ bàn giao theo hợp đồng"
+
+    # DTO mapping
+    dtoClass: "com.learnmore.application.dto.migration.sheet.HopDongDTO"
+
+    # Staging tables
+    stagingRawTable: "staging_raw_hopd"
+    stagingValidTable: "staging_valid_hopd"
+    stagingErrorTable: "staging_error_multisheet"
+
+    # Master table (target)
+    masterTable: "case_detail"
+
+    # Processing config
+    batchSize: 5000
+    parallelProcessing: false
+    enableMasking: true
+
+    # Validation rules reference
+    validationRules:
+      - "hop_dong_required_fields"
+      - "hop_dong_date_formats"
+      - "hop_dong_enum_values"
+      - "hop_dong_business_logic"
+      - "hop_dong_duplicate_check"
+      - "hop_dong_master_references"
+
+  # ----------------------------------------------------------------
+  # Sheet 2: HSBG_theo_CIF
+  # ----------------------------------------------------------------
+  - name: "HSBG_theo_CIF"
+    enabled: true
+    order: 2
+    description: "Hồ sơ bàn giao theo CIF khách hàng"
+
+    # DTO mapping
+    dtoClass: "com.learnmore.application.dto.migration.sheet.CifDTO"
+
+    # Staging tables
+    stagingRawTable: "staging_raw_cif"
+    stagingValidTable: "staging_valid_cif"
+    stagingErrorTable: "staging_error_multisheet"
+
+    # Master table (target)
+    masterTable: "case_detail_cif"
+
+    # Processing config
+    batchSize: 5000
+    parallelProcessing: false
+    enableMasking: true
+
+    # Validation rules reference
+    validationRules:
+      - "cif_required_fields"
+      - "cif_date_formats"
+      - "cif_enum_values"
+      - "cif_business_logic"
+      - "cif_duplicate_check"
+      - "cif_master_references"
+
+  # ----------------------------------------------------------------
+  # Sheet 3: HSBG_theo_tap
+  # ----------------------------------------------------------------
+  - name: "HSBG_theo_tap"
+    enabled: true
+    order: 3
+    description: "Hồ sơ bàn giao theo tập"
+
+    # DTO mapping
+    dtoClass: "com.learnmore.application.dto.migration.sheet.TapDTO"
+
+    # Staging tables
+    stagingRawTable: "staging_raw_tap"
+    stagingValidTable: "staging_valid_tap"
+    stagingErrorTable: "staging_error_multisheet"
+
+    # Master table (target)
+    masterTable: "case_detail_tap"
+
+    # Processing config
+    batchSize: 5000
+    parallelProcessing: false
+    enableMasking: false
+
+    # Validation rules reference
+    validationRules:
+      - "tap_required_fields"
+      - "tap_date_formats"
+      - "tap_enum_values"
+      - "tap_business_logic"
+      - "tap_duplicate_check"
+      - "tap_master_references"
+
+# ================================================================
+# Global Configuration
+# ================================================================
+global:
+  # Timeout settings (milliseconds)
+  ingestTimeout: 300000  # 5 minutes per sheet
+  validationTimeout: 600000  # 10 minutes per sheet
+  insertionTimeout: 900000  # 15 minutes per sheet
+
+  # Monitoring
+  enableMonitoring: true
+  progressUpdateInterval: 5000  # Update progress every 5 seconds
+
+  # Error handling
+  stopOnFirstError: false
+  maxErrorsPerSheet: 10000
+  continueOnSheetFailure: true
+
+  # Performance
+  useParallelSheetProcessing: true
+  maxConcurrentSheets: 3
+
+  # Cleanup
+  autoCleanupOnSuccess: false
+  autoCleanupOnFailure: false
+  retentionDays: 30
