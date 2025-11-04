@@ -12,14 +12,23 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
  * REST Controller for multi-sheet migration
@@ -34,6 +43,243 @@ public class MultiSheetMigrationController {
 
     private final MultiSheetProcessor multiSheetProcessor;
     private final MigrationJobSheetRepository jobSheetRepository;
+
+    // Upload directory configuration
+    private static final String UPLOAD_DIR = System.getProperty("user.home") + File.separator + "excel-uploads";
+    private static final long MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+    private static final List<String> ALLOWED_EXTENSIONS = List.of(".xlsx", ".xls");
+
+    /**
+     * Upload Excel file and start multi-sheet migration
+     * POST /api/migration/multisheet/upload
+     * 
+     * Accepts MultipartFile, validates 3 sheets (HOPD, CIF, TAP), saves file, and starts processing
+     */
+    @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @Operation(summary = "Upload Excel file and start migration",
+               description = "Upload Excel file with 3 sheets (HOPD, CIF, TAP) and start automatic processing")
+    @CircuitBreaker(name = "multiSheetMigration", fallbackMethod = "uploadFileFallback")
+    @RateLimiter(name = "multiSheetMigration")
+    public ResponseEntity<Map<String, Object>> uploadAndStartMigration(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam(value = "async", defaultValue = "false") Boolean async,
+            @RequestParam(value = "testMode", defaultValue = "false") Boolean testMode,
+            @RequestParam(value = "testRowLimit", required = false) Integer testRowLimit) {
+        
+        log.info("Upload Excel file started - Filename: {}, Size: {} bytes", 
+                 file.getOriginalFilename(), file.getSize());
+
+        try {
+            // 1. Validate file
+            Map<String, Object> validationResult = validateUploadedFile(file);
+            if (validationResult.containsKey("error")) {
+                return ResponseEntity.badRequest().body(validationResult);
+            }
+
+            // 2. Generate unique Job ID
+            String jobId = generateJobId();
+            log.info("Generated JobId: {}", jobId);
+
+            // 3. Save file to disk
+            String savedFilePath = saveUploadedFile(file, jobId);
+            log.info("File saved to: {}", savedFilePath);
+
+            // 4. Validate Excel structure (3 sheets: HOPD, CIF, TAP)
+            Map<String, Object> excelValidation = validateExcelStructure(savedFilePath);
+            if (excelValidation.containsKey("error")) {
+                // Delete uploaded file if validation fails
+                deleteFile(savedFilePath);
+                return ResponseEntity.badRequest().body(excelValidation);
+            }
+
+            // 5. Start migration processing
+            MigrationStartRequest request = MigrationStartRequest.builder()
+                    .jobId(jobId)
+                    .filePath(savedFilePath)
+                    .async(async)
+                    .testMode(testMode)
+                    .testRowLimit(testRowLimit)
+                    .build();
+
+            MultiSheetProcessor.MultiSheetProcessResult result =
+                multiSheetProcessor.processAllSheets(request.getJobId(), request.getFilePath());
+
+            // 6. Build response
+            Map<String, Object> response = new HashMap<>();
+            response.put("jobId", jobId);
+            response.put("originalFilename", file.getOriginalFilename());
+            response.put("filePath", savedFilePath);
+            response.put("fileSize", file.getSize());
+            response.put("uploadedAt", LocalDateTime.now().toString());
+            response.put("success", result.isAllSuccess());
+            response.put("totalSheets", result.getTotalSheets());
+            response.put("successSheets", result.getSuccessSheets());
+            response.put("failedSheets", result.getFailedSheets());
+            response.put("totalIngestedRows", result.getTotalIngestedRows());
+            response.put("totalValidRows", result.getTotalValidRows());
+            response.put("totalErrorRows", result.getTotalErrorRows());
+            response.put("totalInsertedRows", result.getTotalInsertedRows());
+            response.put("sheetResults", result.getSheetResults());
+            response.put("excelInfo", excelValidation);
+
+            log.info("Upload and migration completed successfully - JobId: {}", jobId);
+            return ResponseEntity.ok(response);
+
+        } catch (IOException e) {
+            log.error("File I/O error during upload: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "File upload failed: " + e.getMessage()));
+        } catch (Exception e) {
+            log.error("Error during upload and migration: {}", e.getMessage(), e);
+            return ResponseEntity.internalServerError()
+                    .body(Map.of("error", "Migration failed: " + e.getMessage()));
+        }
+    }
+
+    /**
+     * Validate uploaded file (size, extension, not empty)
+     */
+    private Map<String, Object> validateUploadedFile(MultipartFile file) {
+        Map<String, Object> result = new HashMap<>();
+
+        // Check if file is empty
+        if (file.isEmpty()) {
+            result.put("error", "File is empty");
+            return result;
+        }
+
+        // Check file size
+        if (file.getSize() > MAX_FILE_SIZE) {
+            result.put("error", "File size exceeds maximum limit of " + (MAX_FILE_SIZE / 1024 / 1024) + "MB");
+            return result;
+        }
+
+        // Check file extension
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || originalFilename.trim().isEmpty()) {
+            result.put("error", "Invalid filename");
+            return result;
+        }
+
+        String extension = originalFilename.substring(originalFilename.lastIndexOf(".")).toLowerCase();
+        if (!ALLOWED_EXTENSIONS.contains(extension)) {
+            result.put("error", "Invalid file type. Only Excel files (.xlsx, .xls) are allowed");
+            return result;
+        }
+
+        result.put("valid", true);
+        return result;
+    }
+
+    /**
+     * Generate unique Job ID with format: JOB-YYYYMMDD-XXX
+     */
+    private String generateJobId() {
+        String date = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String random = String.format("%03d", (int) (Math.random() * 1000));
+        return "JOB-" + date + "-" + random;
+    }
+
+    /**
+     * Save uploaded file to disk with unique filename
+     */
+    private String saveUploadedFile(MultipartFile file, String jobId) throws IOException {
+        // Create upload directory if not exists
+        Path uploadPath = Paths.get(UPLOAD_DIR);
+        if (!Files.exists(uploadPath)) {
+            Files.createDirectories(uploadPath);
+            log.info("Created upload directory: {}", UPLOAD_DIR);
+        }
+
+        // Generate unique filename
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename == null || originalFilename.isEmpty()) {
+            throw new IOException("Invalid filename");
+        }
+        String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
+        String uniqueFilename = jobId + "_" + System.currentTimeMillis() + extension;
+
+        // Save file
+        Path targetPath = uploadPath.resolve(uniqueFilename);
+        Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
+
+        return targetPath.toString();
+    }
+
+    /**
+     * Validate Excel structure: Must contain 3 sheets (HOPD, CIF, TAP)
+     */
+    private Map<String, Object> validateExcelStructure(String filePath) {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            // Use Apache POI to validate Excel structure
+            org.apache.poi.ss.usermodel.Workbook workbook = 
+                org.apache.poi.ss.usermodel.WorkbookFactory.create(new File(filePath));
+
+            int sheetCount = workbook.getNumberOfSheets();
+            List<String> sheetNames = new java.util.ArrayList<>();
+            
+            for (int i = 0; i < sheetCount; i++) {
+                sheetNames.add(workbook.getSheetName(i));
+            }
+
+            workbook.close();
+
+            // Validate required sheets
+            List<String> requiredSheets = List.of("HOPD", "CIF", "TAP");
+            List<String> missingSheets = requiredSheets.stream()
+                    .filter(sheet -> !sheetNames.contains(sheet))
+                    .toList();
+
+            if (!missingSheets.isEmpty()) {
+                result.put("error", "Excel file is missing required sheets: " + missingSheets);
+                result.put("foundSheets", sheetNames);
+                result.put("requiredSheets", requiredSheets);
+                return result;
+            }
+
+            // Success
+            result.put("valid", true);
+            result.put("totalSheets", sheetCount);
+            result.put("sheetNames", sheetNames);
+            result.put("requiredSheets", requiredSheets);
+
+        } catch (Exception e) {
+            log.error("Error validating Excel structure: {}", e.getMessage(), e);
+            result.put("error", "Invalid Excel file format: " + e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * Delete file from disk
+     */
+    private void deleteFile(String filePath) {
+        try {
+            Files.deleteIfExists(Paths.get(filePath));
+            log.info("Deleted file: {}", filePath);
+        } catch (IOException e) {
+            log.warn("Failed to delete file: {}", filePath, e);
+        }
+    }
+
+    /**
+     * Fallback method for upload circuit breaker
+     */
+    private ResponseEntity<Map<String, Object>> uploadFileFallback(
+            MultipartFile file, Boolean async, Boolean testMode, Integer testRowLimit, Throwable t) {
+        log.error("Circuit breaker triggered for file upload. Filename: {}, Error: {}",
+                  file.getOriginalFilename(), t.getMessage(), t);
+
+        Map<String, Object> errorResponse = new HashMap<>();
+        errorResponse.put("error", "Upload service temporarily unavailable. Please try again later.");
+        errorResponse.put("circuitBreakerTriggered", true);
+        errorResponse.put("details", t.getMessage());
+
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(errorResponse);
+    }
 
     /**
      * Start multi-sheet migration
