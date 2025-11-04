@@ -1,6 +1,7 @@
 package com.learnmore.controller;
 
 import com.learnmore.application.dto.migration.MigrationStartRequest;
+import com.learnmore.application.service.multisheet.AsyncMigrationJobService;
 import com.learnmore.application.service.multisheet.MultiSheetProcessor;
 import com.learnmore.infrastructure.persistence.entity.MigrationJobSheetEntity;
 import com.learnmore.infrastructure.repository.MigrationJobSheetRepository;
@@ -28,7 +29,6 @@ import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 /**
  * REST Controller for multi-sheet migration
@@ -42,6 +42,7 @@ import java.util.UUID;
 public class MultiSheetMigrationController {
 
     private final MultiSheetProcessor multiSheetProcessor;
+    private final AsyncMigrationJobService asyncMigrationJobService;
     private final MigrationJobSheetRepository jobSheetRepository;
 
     // Upload directory configuration
@@ -92,38 +93,62 @@ public class MultiSheetMigrationController {
                 return ResponseEntity.badRequest().body(excelValidation);
             }
 
-            // 5. Start migration processing
-            MigrationStartRequest request = MigrationStartRequest.builder()
-                    .jobId(jobId)
-                    .filePath(savedFilePath)
-                    .async(async)
-                    .testMode(testMode)
-                    .testRowLimit(testRowLimit)
-                    .build();
+            // 5. Submit migration job asynchronously (NON-BLOCKING)
+            // Controller returns immediately, client polls /progress endpoint
+            if (async) {
+                // ASYNC MODE: Submit to background thread pool
+                log.info("🚀 Submitting async job: {}", jobId);
+                asyncMigrationJobService.processAsync(jobId, savedFilePath);
+                
+                // 6. Build immediate response (HTTP 202 Accepted)
+                Map<String, Object> response = new HashMap<>();
+                response.put("jobId", jobId);
+                response.put("status", "STARTED");
+                response.put("message", "Migration job submitted successfully. Use progress endpoint to track status.");
+                response.put("originalFilename", file.getOriginalFilename());
+                response.put("filePath", savedFilePath);
+                response.put("fileSize", file.getSize());
+                response.put("uploadedAt", LocalDateTime.now().toString());
+                response.put("async", true);
+                response.put("excelInfo", excelValidation);
+                
+                // Provide URLs for client
+                response.put("progressUrl", "/api/migration/multisheet/" + jobId + "/progress");
+                response.put("sheetsUrl", "/api/migration/multisheet/" + jobId + "/sheets");
+                response.put("cancelUrl", "/api/migration/multisheet/" + jobId + "/cancel");
+                
+                log.info("✅ Async job submitted successfully - JobId: {}", jobId);
+                return ResponseEntity.accepted().body(response); // HTTP 202
+                
+            } else {
+                // SYNC MODE: Block until completion (backward compatibility)
+                log.warn("⚠️ Using SYNCHRONOUS mode for job: {} (may timeout!)", jobId);
+                
+                MultiSheetProcessor.MultiSheetProcessResult result =
+                    multiSheetProcessor.processAllSheets(jobId, savedFilePath);
 
-            MultiSheetProcessor.MultiSheetProcessResult result =
-                multiSheetProcessor.processAllSheets(request.getJobId(), request.getFilePath());
+                // 6. Build response with full results
+                Map<String, Object> response = new HashMap<>();
+                response.put("jobId", jobId);
+                response.put("originalFilename", file.getOriginalFilename());
+                response.put("filePath", savedFilePath);
+                response.put("fileSize", file.getSize());
+                response.put("uploadedAt", LocalDateTime.now().toString());
+                response.put("async", false);
+                response.put("success", result.isAllSuccess());
+                response.put("totalSheets", result.getTotalSheets());
+                response.put("successSheets", result.getSuccessSheets());
+                response.put("failedSheets", result.getFailedSheets());
+                response.put("totalIngestedRows", result.getTotalIngestedRows());
+                response.put("totalValidRows", result.getTotalValidRows());
+                response.put("totalErrorRows", result.getTotalErrorRows());
+                response.put("totalInsertedRows", result.getTotalInsertedRows());
+                response.put("sheetResults", result.getSheetResults());
+                response.put("excelInfo", excelValidation);
 
-            // 6. Build response
-            Map<String, Object> response = new HashMap<>();
-            response.put("jobId", jobId);
-            response.put("originalFilename", file.getOriginalFilename());
-            response.put("filePath", savedFilePath);
-            response.put("fileSize", file.getSize());
-            response.put("uploadedAt", LocalDateTime.now().toString());
-            response.put("success", result.isAllSuccess());
-            response.put("totalSheets", result.getTotalSheets());
-            response.put("successSheets", result.getSuccessSheets());
-            response.put("failedSheets", result.getFailedSheets());
-            response.put("totalIngestedRows", result.getTotalIngestedRows());
-            response.put("totalValidRows", result.getTotalValidRows());
-            response.put("totalErrorRows", result.getTotalErrorRows());
-            response.put("totalInsertedRows", result.getTotalInsertedRows());
-            response.put("sheetResults", result.getSheetResults());
-            response.put("excelInfo", excelValidation);
-
-            log.info("Upload and migration completed successfully - JobId: {}", jobId);
-            return ResponseEntity.ok(response);
+                log.info("✅ Sync upload and migration completed - JobId: {}", jobId);
+                return ResponseEntity.ok(response);
+            }
 
         } catch (IOException e) {
             log.error("File I/O error during upload: {}", e.getMessage(), e);
@@ -268,6 +293,7 @@ public class MultiSheetMigrationController {
     /**
      * Fallback method for upload circuit breaker
      */
+    @SuppressWarnings("unused")
     private ResponseEntity<Map<String, Object>> uploadFileFallback(
             MultipartFile file, Boolean async, Boolean testMode, Integer testRowLimit, Throwable t) {
         log.error("Circuit breaker triggered for file upload. Filename: {}, Error: {}",
@@ -464,6 +490,12 @@ public class MultiSheetMigrationController {
         response.put("jobId", jobId);
         response.put("totalSheets", sheets.size());
 
+        // Overall job status (async tracking)
+        String overallStatus = asyncMigrationJobService.getOverallJobStatus(jobId);
+        boolean isRunning = asyncMigrationJobService.isJobRunning(jobId);
+        response.put("overallStatus", overallStatus);
+        response.put("isRunning", isRunning);
+
         // Status counts
         long pendingSheets = sheets.stream().filter(s -> "PENDING".equals(s.getStatus())).count();
         long inProgressSheets = sheets.stream().filter(MigrationJobSheetEntity::isInProgress).count();
@@ -621,6 +653,87 @@ public class MultiSheetMigrationController {
     }
 
     /**
+     * Cancel a running migration job
+     * DELETE /api/migration/multisheet/{jobId}/cancel
+     * 
+     * Attempts to cancel the async job if it's still running
+     * Note: Cancellation may not be immediate if job is in critical phase
+     */
+    @DeleteMapping("/{jobId}/cancel")
+    @Operation(summary = "Cancel migration job",
+               description = "Attempts to cancel a running migration job. Returns cancellation status.")
+    public ResponseEntity<Map<String, Object>> cancelJob(@PathVariable String jobId) {
+        log.info("🛑 Cancellation requested for job: {}", jobId);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("jobId", jobId);
+
+        // Check if job is running
+        boolean isRunning = asyncMigrationJobService.isJobRunning(jobId);
+        
+        if (!isRunning) {
+            response.put("cancelled", false);
+            response.put("message", "Job is not running or already completed");
+            response.put("currentStatus", asyncMigrationJobService.getOverallJobStatus(jobId));
+            return ResponseEntity.ok(response);
+        }
+
+        // Attempt cancellation
+        boolean cancelled = asyncMigrationJobService.cancelJob(jobId);
+
+        if (cancelled) {
+            response.put("cancelled", true);
+            response.put("message", "Job cancellation initiated. Processing will stop gracefully.");
+            log.info("✅ Job cancellation successful: {}", jobId);
+            return ResponseEntity.ok(response);
+        } else {
+            response.put("cancelled", false);
+            response.put("message", "Job cancellation failed. Job may be in critical phase or already completing.");
+            log.warn("⚠️ Job cancellation failed: {}", jobId);
+            return ResponseEntity.ok(response);
+        }
+    }
+
+    /**
+     * Get overall job status
+     * GET /api/migration/multisheet/{jobId}/status
+     * 
+     * Returns overall job status (not per-sheet)
+     */
+    @GetMapping("/{jobId}/status")
+    @Operation(summary = "Get overall job status",
+               description = "Returns overall job status: PENDING, STARTED, COMPLETED, COMPLETED_WITH_ERRORS, FAILED, CANCELLED")
+    public ResponseEntity<Map<String, Object>> getJobStatus(@PathVariable String jobId) {
+        String status = asyncMigrationJobService.getOverallJobStatus(jobId);
+        boolean isRunning = asyncMigrationJobService.isJobRunning(jobId);
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("jobId", jobId);
+        response.put("overallStatus", status);
+        response.put("isRunning", isRunning);
+        response.put("canCancel", isRunning);
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Get system info (running jobs count)
+     * GET /api/migration/multisheet/system/info
+     */
+    @GetMapping("/system/info")
+    @Operation(summary = "Get system information",
+               description = "Returns system information including count of running jobs")
+    public ResponseEntity<Map<String, Object>> getSystemInfo() {
+        int runningJobsCount = asyncMigrationJobService.getRunningJobCount();
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("runningJobsCount", runningJobsCount);
+        response.put("timestamp", LocalDateTime.now().toString());
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * Calculate overall progress percentage
      */
     private double calculateOverallProgress(List<MigrationJobSheetEntity> sheets) {
@@ -636,6 +749,7 @@ public class MultiSheetMigrationController {
      * Fallback method for circuit breaker
      * Called when circuit is open or service is unavailable
      */
+    @SuppressWarnings("unused")
     private ResponseEntity<Map<String, Object>> startMigrationFallback(MigrationStartRequest request, Throwable t) {
         log.error("Circuit breaker triggered for multi-sheet migration. JobId: {}, Error: {}",
                   request.getJobId(), t.getMessage(), t);
