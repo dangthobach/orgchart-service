@@ -9,8 +9,8 @@ import lombok.NoArgsConstructor;
 import java.time.LocalDate;
 
 /**
- * DTO cho sheet "HSBG_theo_hop_dong"
- * Mapping các cột Excel theo business rules
+ * DTO for sheet "HSBG_theo_hop_dong" (Contract-based Archive Management)
+ * Maps Excel columns to Java fields with business rules
  */
 @Data
 @Builder
@@ -19,103 +19,103 @@ import java.time.LocalDate;
 public class HopDongDTO {
 
     @ExcelColumn(name = "Kho VPBank", index = 0, required = true)
-    private String khoVpbank;
+    private String vpbankWarehouse;
 
     @ExcelColumn(name = "Mã đơn vị", index = 1, required = true)
-    private String maDonVi;
+    private String unitCode;
 
     @ExcelColumn(name = "Trách nhiệm bàn giao", index = 2)
-    private String trachNhiemBanGiao;
+    private String handoverResponsibility;
 
     @ExcelColumn(name = "Số hợp đồng", index = 3, required = true)
-    private String soHopDong;
+    private String contractNumber;
 
     @ExcelColumn(name = "Tên tập", index = 4)
-    private String tenTap;
+    private String folderName;
 
     @ExcelColumn(name = "Số lượng tập", index = 5, required = true)
-    private Integer soLuongTap;
+    private Integer folderQuantity;
 
     @ExcelColumn(name = "Số CIF/ CCCD/ CMT khách hàng", index = 6)
-    private String soCif;
+    private String customerCif;
 
     @ExcelColumn(name = "Tên khách hàng", index = 7)
-    private String tenKhachHang;
+    private String customerName;
 
     @ExcelColumn(name = "Phân khúc khách hàng", index = 8)
-    private String phanKhucKhachHang;
+    private String customerSegment;
 
     @ExcelColumn(name = "Ngày phải bàn giao", index = 9, dateFormat = "yyyy-MM-dd")
-    private LocalDate ngayPhaiBanGiao;
+    private LocalDate requiredHandoverDate;
 
     @ExcelColumn(name = "Ngày bàn giao", index = 10, dateFormat = "yyyy-MM-dd")
-    private LocalDate ngayBanGiao;
+    private LocalDate actualHandoverDate;
 
     @ExcelColumn(name = "Ngày giải ngân", index = 11, dateFormat = "yyyy-MM-dd", required = true)
-    private LocalDate ngayGiaiNgan;
+    private LocalDate disbursementDate;
 
     @ExcelColumn(name = "Ngày đến hạn", index = 12, dateFormat = "yyyy-MM-dd")
-    private LocalDate ngayDenHan;
+    private LocalDate dueDate;
 
     @ExcelColumn(name = "Loại hồ sơ", index = 13, required = true)
-    private String loaiHoSo;
+    private String documentType;
 
     @ExcelColumn(name = "Luồng hồ sơ", index = 14)
-    private String luongHoSo;
+    private String documentFlow;
 
     @ExcelColumn(name = "Phân hạn cấp TD", index = 15, required = true)
-    private String phanHanCapTd;
+    private String retentionPeriodCategory;
 
     @ExcelColumn(name = "Ngày dự kiến tiêu hủy", index = 16, dateFormat = "yyyy-MM-dd")
-    private LocalDate ngayDuKienTieuHuy;
+    private LocalDate expectedDestructionDate;
 
     @ExcelColumn(name = "Sản phẩm", index = 17)
-    private String sanPham;
+    private String product;
 
     @ExcelColumn(name = "Trạng thái case PDM", index = 18)
-    private String trangThaiCasePdm;
+    private String pdmCaseStatus;
 
     @ExcelColumn(name = "Ghi chú", index = 19)
-    private String ghiChu;
+    private String notes;
 
     @ExcelColumn(name = "Mã thùng", index = 20, required = true)
-    private String maThung;
+    private String boxCode;
 
     @ExcelColumn(name = "Ngày nhập kho VPBank", index = 21, dateFormat = "yyyy-MM-dd")
-    private LocalDate ngayNhapKhoVpbank;
+    private LocalDate vpbankWarehouseEntryDate;
 
     @ExcelColumn(name = "Ngày chuyển kho Crown", index = 22, dateFormat = "yyyy-MM-dd")
-    private LocalDate ngayChuyenKhoCrown;
+    private LocalDate crownWarehouseTransferDate;
 
     @ExcelColumn(name = "Khu vực", index = 23)
-    private String khuVuc;
+    private String zone;
 
     @ExcelColumn(name = "Hàng", index = 24)
-    private Integer hang;
+    private Integer row;
 
     @ExcelColumn(name = "Cột", index = 25)
-    private Integer cot;
+    private Integer column;
 
     @ExcelColumn(name = "Tình trạng thùng", index = 26)
-    private String tinhTrangThung;
+    private String boxCondition;
 
     @ExcelColumn(name = "Trạng thái thùng", index = 27)
-    private String trangThaiThung;
+    private String boxStatus;
 
     @ExcelColumn(name = "Thời hạn cấp TD", index = 28)
-    private Integer thoiHanCapTd;
+    private Integer retentionPeriodYears;
 
     @ExcelColumn(name = "Mã DAO", index = 29)
-    private String maDao;
+    private String daoCode;
 
     @ExcelColumn(name = "Mã TS", index = 30)
-    private String maTs;
+    private String assetCode;
 
     @ExcelColumn(name = "RRT.ID", index = 31)
     private String rrtId;
 
     @ExcelColumn(name = "Mã NQ", index = 32)
-    private String maNq;
+    private String resolutionCode;
 
     // Transient fields for validation
     private transient String validationErrors;
@@ -123,87 +123,87 @@ public class HopDongDTO {
 
     /**
      * Business key for duplicate check
-     * Rule varies by loaiHoSo
+     * Rule varies by documentType
      */
     public String generateBusinessKey() {
-        // CT2: Check trùng dữ liệu theo Loại hồ sơ
+        // CT2: Check duplicate data by Document Type
         if (isLoanType()) {
-            // Trùng: Số HD + Loại HS + Ngày giải ngân
-            return String.format("%s_%s_%s", soHopDong, loaiHoSo, ngayGiaiNgan);
+            // Duplicate check: Contract Number + Document Type + Disbursement Date
+            return String.format("%s_%s_%s", contractNumber, documentType, disbursementDate);
         } else if (isCreditCardType()) {
-            // Trùng: Số HD + Loại HS + Số CIF
-            return String.format("%s_%s_%s", soHopDong, loaiHoSo, soCif);
-        } else if ("TTK".equals(loaiHoSo)) {
-            // Trùng: Số HD + Loại HS + Số CIF + Mã đơn vị + Ngày giải ngân
-            return String.format("%s_%s_%s_%s_%s", soHopDong, loaiHoSo, soCif, maDonVi, ngayGiaiNgan);
+            // Duplicate check: Contract Number + Document Type + Customer CIF
+            return String.format("%s_%s_%s", contractNumber, documentType, customerCif);
+        } else if ("TTK".equals(documentType)) {
+            // Duplicate check: Contract Number + Document Type + Customer CIF + Unit Code + Disbursement Date
+            return String.format("%s_%s_%s_%s_%s", contractNumber, documentType, customerCif, unitCode, disbursementDate);
         }
-        return String.format("%s_%s", soHopDong, loaiHoSo);
+        return String.format("%s_%s", contractNumber, documentType);
     }
 
     /**
-     * Check if loaiHoSo is loan type
+     * Check if documentType is loan type
      * LD, MD, OD, HDHM, KSSV, Bao thanh toán, Biên nhận thế chấp
      */
     private boolean isLoanType() {
-        return loaiHoSo != null && (
-            loaiHoSo.equals("LD") || loaiHoSo.equals("MD") || loaiHoSo.equals("OD") ||
-            loaiHoSo.equals("HDHM") || loaiHoSo.equals("KSSV") ||
-            loaiHoSo.equals("Bao thanh toán") || loaiHoSo.equals("Biên nhận thế chấp")
+        return documentType != null && (
+            documentType.equals("LD") || documentType.equals("MD") || documentType.equals("OD") ||
+            documentType.equals("HDHM") || documentType.equals("KSSV") ||
+            documentType.equals("Bao thanh toán") || documentType.equals("Biên nhận thế chấp")
         );
     }
 
     /**
-     * Check if loaiHoSo is credit card type
+     * Check if documentType is credit card type
      * CC, TSBD
      */
     private boolean isCreditCardType() {
-        return loaiHoSo != null && (loaiHoSo.equals("CC") || loaiHoSo.equals("TSBD"));
+        return documentType != null && (documentType.equals("CC") || documentType.equals("TSBD"));
     }
 
     /**
-     * Calculate destruction date based on phanHanCapTd and ngayGiaiNgan
-     * CT1: Công thức tính "Ngày dự kiến tiêu hủy"
+     * Calculate destruction date based on retentionPeriodCategory and disbursementDate
+     * CT1: Formula to calculate "Expected Destruction Date"
      */
     public LocalDate calculateDestructionDate() {
-        if ("Vĩnh viễn".equals(phanHanCapTd)) {
+        if ("Vĩnh viễn".equals(retentionPeriodCategory)) {
             return LocalDate.of(9999, 12, 31);
         }
 
-        if (ngayGiaiNgan == null) {
+        if (disbursementDate == null) {
             return LocalDate.of(9999, 12, 31);
         }
 
-        if ("Ngắn hạn".equals(phanHanCapTd)) {
-            return ngayGiaiNgan.plusYears(5);
-        } else if ("Trung hạn".equals(phanHanCapTd)) {
-            return ngayGiaiNgan.plusYears(10);
-        } else if ("Dài hạn".equals(phanHanCapTd)) {
-            return ngayGiaiNgan.plusYears(15);
+        if ("Ngắn hạn".equals(retentionPeriodCategory)) {
+            return disbursementDate.plusYears(5);
+        } else if ("Trung hạn".equals(retentionPeriodCategory)) {
+            return disbursementDate.plusYears(10);
+        } else if ("Dài hạn".equals(retentionPeriodCategory)) {
+            return disbursementDate.plusYears(15);
         }
 
         return LocalDate.of(9999, 12, 31);
     }
 
     /**
-     * Mask sensitive data
+     * Mask sensitive data for GDPR compliance
      */
     public void maskSensitiveData() {
-        if (soHopDong != null && soHopDong.length() > 4) {
-            soHopDong = soHopDong.substring(0, 2) +
-                       "*".repeat(soHopDong.length() - 4) +
-                       soHopDong.substring(soHopDong.length() - 2);
+        if (contractNumber != null && contractNumber.length() > 4) {
+            contractNumber = contractNumber.substring(0, 2) +
+                       "*".repeat(contractNumber.length() - 4) +
+                       contractNumber.substring(contractNumber.length() - 2);
         }
 
-        if (soCif != null && soCif.length() > 4) {
-            soCif = soCif.substring(0, 2) +
-                   "*".repeat(soCif.length() - 4) +
-                   soCif.substring(soCif.length() - 2);
+        if (customerCif != null && customerCif.length() > 4) {
+            customerCif = customerCif.substring(0, 2) +
+                   "*".repeat(customerCif.length() - 4) +
+                   customerCif.substring(customerCif.length() - 2);
         }
 
-        if (tenKhachHang != null && tenKhachHang.length() > 4) {
-            tenKhachHang = tenKhachHang.substring(0, 2) +
-                          "*".repeat(tenKhachHang.length() - 4) +
-                          tenKhachHang.substring(tenKhachHang.length() - 2);
+        if (customerName != null && customerName.length() > 4) {
+            customerName = customerName.substring(0, 2) +
+                          "*".repeat(customerName.length() - 4) +
+                          customerName.substring(customerName.length() - 2);
         }
     }
 }

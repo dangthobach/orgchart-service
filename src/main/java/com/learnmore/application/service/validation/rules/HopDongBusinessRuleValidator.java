@@ -39,81 +39,81 @@ public class HopDongBusinessRuleValidator implements ValidationRule<HopDongDTO> 
     }
 
     /**
-     * CT1: Công thức tính "Ngày dự kiến tiêu hủy"
-     * Must match phanHanCapTd
+     * CT1: Formula to calculate "Expected Destruction Date"
+     * Must match retentionPeriodCategory
      */
     private void validateDestructionDate(HopDongDTO data, ValidationResult result) {
-        if (data.getPhanHanCapTd() == null || data.getNgayDuKienTieuHuy() == null) {
+        if (data.getRetentionPeriodCategory() == null || data.getExpectedDestructionDate() == null) {
             return;
         }
 
         LocalDate calculated = data.calculateDestructionDate();
-        LocalDate actual = data.getNgayDuKienTieuHuy();
+        LocalDate actual = data.getExpectedDestructionDate();
 
         if (!calculated.equals(actual)) {
             result.addError(ValidationError.businessRuleViolation(
-                    "ngayDuKienTieuHuy",
+                    "expectedDestructionDate",
                     actual.toString(),
-                    String.format("Ngày dự kiến tiêu hủy không khớp với phân hạn. Mong đợi: %s", calculated)
+                    String.format("Expected destruction date does not match retention period. Expected: %s", calculated)
             ));
         }
     }
 
     /**
-     * CT6: Kiểm tra "Ngày đến hạn tiêu hủy" (Mặc định là "31-Dec-9999") theo Phân hạn cấp TD
-     * Nếu Phân hạn = "Vĩnh viễn" thì Ngày dự kiến tiêu hủy phải là 9999-12-31
+     * CT6: Check "Destruction Due Date" (Default is "31-Dec-9999") by Retention Period Category
+     * If Retention Period = "Vĩnh viễn" then Expected Destruction Date must be 9999-12-31
      */
     private void validateDestructionDateForVinhVien(HopDongDTO data, ValidationResult result) {
-        if ("Vĩnh viễn".equals(data.getPhanHanCapTd())) {
+        if ("Vĩnh viễn".equals(data.getRetentionPeriodCategory())) {
             LocalDate expectedDate = LocalDate.of(9999, 12, 31);
 
-            if (data.getNgayDuKienTieuHuy() == null) {
+            if (data.getExpectedDestructionDate() == null) {
                 result.addError(ValidationError.businessRuleViolation(
-                        "ngayDuKienTieuHuy",
+                        "expectedDestructionDate",
                         null,
-                        "Phân hạn 'Vĩnh viễn' phải có Ngày dự kiến tiêu hủy = 31-Dec-9999"
+                        "Retention period 'Vĩnh viễn' must have Expected Destruction Date = 31-Dec-9999"
                 ));
-            } else if (data.getNgayDuKienTieuHuy().getYear() != 9999) {
+            } else if (data.getExpectedDestructionDate().getYear() != 9999) {
                 result.addError(ValidationError.businessRuleViolation(
-                        "ngayDuKienTieuHuy",
-                        data.getNgayDuKienTieuHuy().toString(),
-                        "Phân hạn 'Vĩnh viễn' phải có Ngày dự kiến tiêu hủy = 31-Dec-9999"
+                        "expectedDestructionDate",
+                        data.getExpectedDestructionDate().toString(),
+                        "Retention period 'Vĩnh viễn' must have Expected Destruction Date = 31-Dec-9999"
                 ));
             }
         }
     }
 
     /**
-     * CT7: Kiểm tra "Ngày đến hạn tiêu hủy" theo Ngày đến hạn
-     * Nếu Ngày đến hạn = blank thì Ngày dự kiến tiêu hủy phải là 9999-12-31
+     * CT7: Check "Destruction Due Date" by Due Date
+     * If Due Date = blank then Expected Destruction Date must be 9999-12-31
      */
     private void validateDestructionDateWhenNoDeadline(HopDongDTO data, ValidationResult result) {
-        if (data.getNgayDenHan() == null) {
-            if (data.getNgayDuKienTieuHuy() == null) {
+        if (data.getDueDate() == null) {
+            if (data.getExpectedDestructionDate() == null) {
                 result.addError(ValidationError.businessRuleViolation(
-                        "ngayDuKienTieuHuy",
+                        "expectedDestructionDate",
                         null,
-                        "Khi Ngày đến hạn trống, Ngày dự kiến tiêu hủy phải là 31-Dec-9999"
+                        "When Due Date is blank, Expected Destruction Date must be 31-Dec-9999"
                 ));
-            } else if (data.getNgayDuKienTieuHuy().getYear() != 9999) {
+            } else if (data.getExpectedDestructionDate().getYear() != 9999) {
                 result.addError(ValidationError.businessRuleViolation(
-                        "ngayDuKienTieuHuy",
-                        data.getNgayDuKienTieuHuy().toString(),
-                        "Khi Ngày đến hạn trống, Ngày dự kiến tiêu hủy phải là 31-Dec-9999"
+                        "expectedDestructionDate",
+                        data.getExpectedDestructionDate().toString(),
+                        "When Due Date is blank, Expected Destruction Date must be 31-Dec-9999"
                 ));
             }
         }
     }
 
     /**
-     * CT5: Kiểm tra "Thời hạn cấp TD" phải là số nguyên dương
+     * CT5: Check "Retention Period Years" must be positive integer
      */
     private void validateThoiHanCapTd(HopDongDTO data, ValidationResult result) {
-        if (data.getThoiHanCapTd() != null && data.getThoiHanCapTd() <= 0) {
+        if (data.getRetentionPeriodYears() != null && data.getRetentionPeriodYears() <= 0) {
             result.addError(ValidationError.businessRuleViolation(
-                    "thoiHanCapTd",
-                    data.getThoiHanCapTd().toString(),
-                    "Thời hạn cấp TD phải là số nguyên dương"
+                    "retentionPeriodYears",
+                    data.getRetentionPeriodYears().toString(),
+                    "Retention period years must be positive integer"
             ));
         }
     }

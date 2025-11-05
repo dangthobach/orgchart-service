@@ -10,8 +10,8 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 
 /**
- * DTO cho sheet "HSBG_theo_tap"
- * Mapping các cột Excel theo business rules
+ * DTO for sheet "HSBG_theo_tap" (Folder-based Archive Management)
+ * Maps Excel columns to Java fields with business rules
  */
 @Data
 @Builder
@@ -20,73 +20,73 @@ import java.time.YearMonth;
 public class TapDTO {
 
     @ExcelColumn(name = "Kho VPBank", index = 0, required = true)
-    private String khoVpbank;
+    private String vpbankWarehouse;
 
     @ExcelColumn(name = "Mã đơn vị", index = 1, required = true)
-    private String maDonVi;
+    private String unitCode;
 
     @ExcelColumn(name = "Trách nhiệm bàn giao", index = 2, required = true)
-    private String trachNhiemBanGiao;
+    private String handoverResponsibility;
 
     @ExcelColumn(name = "Tháng phát sinh", index = 3, required = true, dateFormat = "yyyy-MM")
-    private YearMonth thangPhatSinh;
+    private YearMonth incidentMonth;
 
     @ExcelColumn(name = "Tên tập", index = 4)
-    private String tenTap;
+    private String folderName;
 
     @ExcelColumn(name = "Số lượng tập", index = 5, required = true)
-    private Integer soLuongTap;
+    private Integer folderQuantity;
 
     @ExcelColumn(name = "Ngày phải bàn giao", index = 6, dateFormat = "yyyy-MM-dd")
-    private LocalDate ngayPhaiBanGiao;
+    private LocalDate requiredHandoverDate;
 
     @ExcelColumn(name = "Ngày bàn giao", index = 7, dateFormat = "yyyy-MM-dd")
-    private LocalDate ngayBanGiao;
+    private LocalDate actualHandoverDate;
 
     @ExcelColumn(name = "Loại hồ sơ", index = 8, required = true)
-    private String loaiHoSo;
+    private String documentType;
 
     @ExcelColumn(name = "Luồng hồ sơ", index = 9, required = true)
-    private String luongHoSo;
+    private String documentFlow;
 
     @ExcelColumn(name = "Phân hạn cấp TD", index = 10, required = true)
-    private String phanHanCapTd;
+    private String retentionPeriodCategory;
 
     @ExcelColumn(name = "Ngày dự kiến tiêu hủy", index = 11, dateFormat = "yyyy-MM-dd", required = true)
-    private LocalDate ngayDuKienTieuHuy;
+    private LocalDate expectedDestructionDate;
 
     @ExcelColumn(name = "Sản phẩm", index = 12, required = true)
-    private String sanPham;
+    private String product;
 
     @ExcelColumn(name = "Trạng thái case PDM", index = 13)
-    private String trangThaiCasePdm;
+    private String pdmCaseStatus;
 
     @ExcelColumn(name = "Ghi chú", index = 14)
-    private String ghiChu;
+    private String notes;
 
     @ExcelColumn(name = "Mã thùng", index = 15, required = true)
-    private String maThung;
+    private String boxCode;
 
     @ExcelColumn(name = "Ngày nhập kho VPBank", index = 16, dateFormat = "yyyy-MM-dd")
-    private LocalDate ngayNhapKhoVpbank;
+    private LocalDate vpbankWarehouseEntryDate;
 
     @ExcelColumn(name = "Ngày chuyển kho Crown", index = 17, dateFormat = "yyyy-MM-dd")
-    private LocalDate ngayChuyenKhoCrown;
+    private LocalDate crownWarehouseTransferDate;
 
     @ExcelColumn(name = "Khu vực", index = 18)
-    private String khuVuc;
+    private String zone;
 
     @ExcelColumn(name = "Hàng", index = 19)
-    private Integer hang;
+    private Integer row;
 
     @ExcelColumn(name = "Cột", index = 20)
-    private Integer cot;
+    private Integer column;
 
     @ExcelColumn(name = "Tình trạng thùng", index = 21)
-    private String tinhTrangThung;
+    private String boxCondition;
 
     @ExcelColumn(name = "Trạng thái thùng", index = 22)
-    private String trangThaiThung;
+    private String boxStatus;
 
     // Transient fields for validation
     private transient String validationErrors;
@@ -94,50 +94,50 @@ public class TapDTO {
 
     /**
      * Business key for duplicate check
-     * CT1: Check trùng dữ liệu key (Mã DV + TNBG + Tháng phát sinh + Sản phẩm)
+     * CT1: Check duplicate data key (Unit Code + Handover Responsibility + Incident Month + Product)
      */
     public String generateBusinessKey() {
-        return String.format("%s_%s_%s_%s", maDonVi, trachNhiemBanGiao, thangPhatSinh, sanPham);
+        return String.format("%s_%s_%s_%s", unitCode, handoverResponsibility, incidentMonth, product);
     }
 
     /**
-     * Validate loaiHoSo must be "KSSV"
-     * CT2: Kiểm tra dữ liệu "Loại hồ sơ" = "KSSV"
+     * Validate documentType must be "KSSV"
+     * CT2: Check data "Document Type" = "KSSV"
      */
-    public boolean isValidLoaiHoSo() {
-        return "KSSV".equals(loaiHoSo);
+    public boolean isValidDocumentType() {
+        return "KSSV".equals(documentType);
     }
 
     /**
-     * Validate luongHoSo must be "HSTD thường"
-     * CT3: Kiểm tra dữ liệu "Luồng hồ sơ" = "HSTD thường"
+     * Validate documentFlow must be "HSTD thường"
+     * CT3: Check data "Document Flow" = "HSTD thường"
      */
-    public boolean isValidLuongHoSo() {
-        return "HSTD thường".equals(luongHoSo);
+    public boolean isValidDocumentFlow() {
+        return "HSTD thường".equals(documentFlow);
     }
 
     /**
-     * Validate phanHanCapTd must be "Vĩnh viễn"
-     * CT4: Kiểm tra dữ liệu "Phân hạn cấp TD" = "Vĩnh viễn"
+     * Validate retentionPeriodCategory must be "Vĩnh viễn"
+     * CT4: Check data "Retention Period Category" = "Vĩnh viễn"
      */
-    public boolean isValidPhanHanCapTd() {
-        return "Vĩnh viễn".equals(phanHanCapTd);
+    public boolean isValidRetentionPeriodCategory() {
+        return "Vĩnh viễn".equals(retentionPeriodCategory);
     }
 
     /**
-     * Validate ngayDuKienTieuHuy must be "31-Dec-9999"
-     * CT5: Kiểm tra dữ liệu "Ngày dự kiến tiêu hủy" = "31-Dec-9999"
+     * Validate expectedDestructionDate must be "31-Dec-9999"
+     * CT5: Check data "Expected Destruction Date" = "31-Dec-9999"
      */
-    public boolean isValidNgayDuKienTieuHuy() {
-        if (ngayDuKienTieuHuy == null) return false;
-        return ngayDuKienTieuHuy.equals(LocalDate.of(9999, 12, 31));
+    public boolean isValidExpectedDestructionDate() {
+        if (expectedDestructionDate == null) return false;
+        return expectedDestructionDate.equals(LocalDate.of(9999, 12, 31));
     }
 
     /**
-     * Validate sanPham must be "KSSV"
-     * CT6: Kiểm tra dữ liệu "Sản phẩm" = "KSSV"
+     * Validate product must be "KSSV"
+     * CT6: Check data "Product" = "KSSV"
      */
-    public boolean isValidSanPham() {
-        return "KSSV".equals(sanPham);
+    public boolean isValidProduct() {
+        return "KSSV".equals(product);
     }
 }
