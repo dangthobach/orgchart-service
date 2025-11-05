@@ -39,20 +39,27 @@ public class AsyncMigrationJobService {
         = new ConcurrentHashMap<>();
 
     /**
-     * Process migration job asynchronously
+     * Process migration job asynchronously FROM MEMORY (no file I/O)
      * 
      * Runs in background thread pool (migrationExecutor)
      * Returns CompletableFuture for chaining/cancellation
      * 
+     * Benefits:
+     * - No file leak risk (no disk cleanup needed)
+     * - Faster processing (no disk I/O)
+     * - Thread-safe (each job has its own byte array copy)
+     * 
      * @param jobId Unique job identifier
-     * @param filePath Absolute path to Excel file
+     * @param fileBytes Excel file content in memory (max 100MB)
+     * @param originalFilename Original file name for logging
      * @return CompletableFuture with result (completes after 10-30 minutes)
      */
     @Async("migrationExecutor")
-    public CompletableFuture<MultiSheetProcessor.MultiSheetProcessResult> processAsync(
-            String jobId, String filePath) {
+    public CompletableFuture<MultiSheetProcessor.MultiSheetProcessResult> processAsyncFromMemory(
+            String jobId, byte[] fileBytes, String originalFilename) {
         
-        log.info("🚀 [ASYNC] Starting migration job: {}", jobId);
+        log.info("🚀 [ASYNC] Starting migration job: {} (filename: {}, size: {} MB)", 
+                 jobId, originalFilename, fileBytes.length / 1024.0 / 1024.0);
         
         CompletableFuture<MultiSheetProcessor.MultiSheetProcessResult> future = new CompletableFuture<>();
         
@@ -63,10 +70,11 @@ public class AsyncMigrationJobService {
             // Update overall job status to STARTED
             updateOverallJobStatus(jobId, "STARTED", null);
             
-            // Process all sheets (this is the long-running blocking operation)
+            // Process all sheets from memory (no file I/O)
+            // This is the long-running blocking operation (10-30 minutes)
             // It's OK to block here because we're in an async thread
             MultiSheetProcessor.MultiSheetProcessResult result = 
-                multiSheetProcessor.processAllSheets(jobId, filePath);
+                multiSheetProcessor.processAllSheetsFromMemory(jobId, fileBytes, originalFilename);
             
             // Update overall job status based on result
             if (result.isAllSuccess()) {

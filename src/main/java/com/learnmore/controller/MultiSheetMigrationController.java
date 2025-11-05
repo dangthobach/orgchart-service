@@ -18,13 +18,11 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
-import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -51,8 +49,7 @@ public class MultiSheetMigrationController {
     private final AsyncMigrationJobService asyncMigrationJobService;
     private final MigrationJobSheetRepository jobSheetRepository;
 
-    // Upload directory configuration
-    private static final String UPLOAD_DIR = System.getProperty("user.home") + File.separator + "excel-uploads";
+    // Upload directory configuration (deprecated local storage removed)
     private static final long MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
     private static final List<String> ALLOWED_EXTENSIONS = List.of(".xlsx", ".xls");
 
@@ -61,9 +58,6 @@ public class MultiSheetMigrationController {
     private static final String SHEET_NAME_CONTRACT = "HSBG_theo_hop_dong";
     private static final String SHEET_NAME_CIF = "HSBG_theo_CIF";
     private static final String SHEET_NAME_FOLDER = "HSBG_theo_tap";
-    private static final List<String> REQUIRED_SHEET_NAMES = List.of(
-        SHEET_NAME_CONTRACT, SHEET_NAME_CIF, SHEET_NAME_FOLDER
-    );
 
     /**
      * Upload Excel file and start multi-sheet migration with early validation
@@ -109,11 +103,23 @@ public class MultiSheetMigrationController {
             log.info("✅ Generated Job ID: {}", jobId);
 
             // ============================================================
+            // OPTIMIZATION: Read file into memory ONCE for all validations
+            // Avoids multiple file.getInputStream() calls and potential resource leaks
+            // Max file size: 100MB (validated in Phase 1)
+            // ============================================================
+            log.info("📥 Reading file into memory (size: {} bytes)", file.getSize());
+            byte[] fileBytes = file.getBytes();
+            log.info("✅ File loaded into memory: {} MB", fileBytes.length / 1024.0 / 1024.0);
+
+            // ============================================================
             // PHASE 2: Sheet Structure Validation (Fail Fast - Memory Efficient)
             // Uses SAX streaming to check sheet names without loading entire file
             // ============================================================
             log.info("🔍 Phase 2: Sheet structure validation (3 required sheets)");
-            Map<String, Object> sheetValidation = validateSheetStructureBeforeSaving(file);
+            Map<String, Object> sheetValidation;
+            try (InputStream stream = new ByteArrayInputStream(fileBytes)) {
+                sheetValidation = validateSheetStructureBeforeSaving(stream);
+            }
             if (sheetValidation.containsKey("error")) {
                 log.warn("❌ Sheet structure validation failed: {}", sheetValidation.get("error"));
                 return ResponseEntity.badRequest().body(sheetValidation);
@@ -123,8 +129,12 @@ public class MultiSheetMigrationController {
             // PHASE 3: Dimension Validation per Sheet (< 10K rows)
             // Uses ExcelDimensionValidator with SAX streaming for constant memory
             // ============================================================
-            log.info("🔍 Phase 3: Dimension validation (max {} rows per sheet)", MAX_ROWS_PER_SHEET);
-            Map<String, Object> dimensionValidation = validateSheetDimensionsBeforeSaving(file);
+            int effectiveMaxRows = testRowLimit != null ? testRowLimit : MAX_ROWS_PER_SHEET;
+            log.info("🔍 Phase 3: Dimension validation (max {} rows per sheet)", effectiveMaxRows);
+            Map<String, Object> dimensionValidation;
+            try (InputStream stream = new ByteArrayInputStream(fileBytes)) {
+                dimensionValidation = validateSheetDimensionsBeforeSaving(stream, effectiveMaxRows);
+            }
             if (dimensionValidation.containsKey("error")) {
                 log.warn("❌ Dimension validation failed: {}", dimensionValidation.get("error"));
                 return ResponseEntity.badRequest().body(dimensionValidation);
@@ -140,70 +150,109 @@ public class MultiSheetMigrationController {
             // Non-blocking warnings only
             // ============================================================
             log.info("🔍 Phase 4: Template validation (column headers)");
-            Map<String, Object> templateValidation = validateTemplateStructureBeforeSaving(file);
+            Map<String, Object> templateValidation;
+            try (InputStream stream = new ByteArrayInputStream(fileBytes)) {
+                templateValidation = validateTemplateStructureBeforeSaving(stream);
+            }
             if (templateValidation.containsKey("warnings")) {
                 log.warn("⚠️ Template validation has warnings: {}", templateValidation.get("warnings"));
                 // Continue processing - warnings are non-blocking
             }
 
             // ============================================================
-            // PHASE 5: Save File After All Validations Pass
+            // PHASE 5: Idempotency Check (Prevent duplicate job submission)
             // ============================================================
-            log.info("💾 Phase 5: Saving file to disk after successful validation");
-            String savedFilePath = saveUploadedFile(file, jobId);
-            log.info("✅ File saved to: {}", savedFilePath);
+            List<MigrationJobSheetEntity> existingSheets = 
+                jobSheetRepository.findByJobIdOrderBySheetOrder(jobId);
+            
+            if (!existingSheets.isEmpty()) {
+                boolean anyInProgress = existingSheets.stream()
+                    .anyMatch(MigrationJobSheetEntity::isInProgress);
+                
+                if (anyInProgress) {
+                    log.warn("⚠️ Duplicate job submission detected: {}", jobId);
+                    return ResponseEntity.status(HttpStatus.CONFLICT)
+                        .body(Map.of(
+                            "error", "Job already in progress",
+                            "jobId", jobId,
+                            "progressUrl", "/api/migration/multisheet/" + jobId + "/progress"
+                        ));
+                }
+            }
 
             // ============================================================
-            // PHASE 6: Start Migration Processing
+            // PHASE 6: Start Migration Processing (In-Memory)
             // ============================================================
             long validationTimeMs = System.currentTimeMillis() - startTime;
             log.info("⏱️ Total validation time: {} ms", validationTimeMs);
 
             if (async) {
-                // ASYNC MODE: Submit to background thread pool
-                log.info("🚀 Submitting async job: {}", jobId);
-                asyncMigrationJobService.processAsync(jobId, savedFilePath);
+                // ASYNC MODE: Submit to background thread pool (process from memory)
+                log.info("🚀 Submitting async job: {} (in-memory processing)", jobId);
+                
+                // Pass byte array to async service (no file I/O needed)
+                asyncMigrationJobService.processAsyncFromMemory(jobId, fileBytes, file.getOriginalFilename());
                 
                 // Build immediate response (HTTP 202 Accepted)
                 Map<String, Object> response = new HashMap<>();
                 response.put("jobId", jobId);
                 response.put("status", "STARTED");
-                response.put("message", "Migration job submitted successfully. Use progress endpoint to track status.");
+                response.put("message", "Migration job submitted successfully (in-memory processing). Use progress endpoint to track status.");
                 response.put("originalFilename", file.getOriginalFilename());
-                response.put("filePath", savedFilePath);
                 response.put("fileSize", file.getSize());
                 response.put("uploadedAt", LocalDateTime.now().toString());
                 response.put("async", true);
                 response.put("validationTimeMs", validationTimeMs);
                 response.put("sheetRowCounts", sheetRowCounts);
                 response.put("templateWarnings", templateValidation.get("warnings"));
+                response.put("processingMode", "in-memory");
                 
                 // Provide URLs for client
                 response.put("progressUrl", "/api/migration/multisheet/" + jobId + "/progress");
                 response.put("sheetsUrl", "/api/migration/multisheet/" + jobId + "/sheets");
                 response.put("cancelUrl", "/api/migration/multisheet/" + jobId + "/cancel");
                 
-                log.info("✅ Async job submitted successfully - JobId: {}", jobId);
+                log.info("✅ Async job submitted successfully (in-memory) - JobId: {}", jobId);
                 return ResponseEntity.accepted().body(response); // HTTP 202
                 
             } else {
                 // SYNC MODE: Block until completion (backward compatibility)
-                log.warn("⚠️ Using SYNCHRONOUS mode for job: {} (may timeout!)", jobId);
+                // Check estimated processing time to avoid timeout
+                int totalRows = sheetRowCounts.values().stream().mapToInt(Integer::intValue).sum();
+                long estimatedTimeSeconds = (totalRows / 100) + 30; // ~100 rows/sec + 30s overhead
                 
+                if (estimatedTimeSeconds > 300) { // > 5 minutes
+                    log.warn("⚠️ Sync mode may timeout! Estimated time: {}s, Total rows: {}", 
+                             estimatedTimeSeconds, totalRows);
+                    
+                    return ResponseEntity.status(HttpStatus.REQUEST_TIMEOUT)
+                        .body(Map.of(
+                            "error", "File too large for synchronous processing",
+                            "totalRows", totalRows,
+                            "estimatedTimeSeconds", estimatedTimeSeconds,
+                            "recommendation", "Please use async=true parameter",
+                            "maxSyncRows", 30000
+                        ));
+                }
+                
+                log.warn("⚠️ Using SYNCHRONOUS mode for job: {} (estimated {}s, in-memory processing)", 
+                         jobId, estimatedTimeSeconds);
+                
+                // Process from memory (pass byte array to processor)
                 MultiSheetProcessor.MultiSheetProcessResult result =
-                    multiSheetProcessor.processAllSheets(jobId, savedFilePath);
+                    multiSheetProcessor.processAllSheetsFromMemory(jobId, fileBytes, file.getOriginalFilename());
 
                 // Build response with full results
                 Map<String, Object> response = new HashMap<>();
                 response.put("jobId", jobId);
                 response.put("originalFilename", file.getOriginalFilename());
-                response.put("filePath", savedFilePath);
                 response.put("fileSize", file.getSize());
                 response.put("uploadedAt", LocalDateTime.now().toString());
                 response.put("async", false);
                 response.put("validationTimeMs", validationTimeMs);
                 response.put("sheetRowCounts", sheetRowCounts);
                 response.put("templateWarnings", templateValidation.get("warnings"));
+                response.put("processingMode", "in-memory");
                 response.put("success", result.isAllSuccess());
                 response.put("totalSheets", result.getTotalSheets());
                 response.put("successSheets", result.getSuccessSheets());
@@ -217,7 +266,7 @@ public class MultiSheetMigrationController {
                 long totalTimeMs = System.currentTimeMillis() - startTime;
                 response.put("totalProcessingTimeMs", totalTimeMs);
 
-                log.info("✅ Sync upload and migration completed - JobId: {} in {} ms", jobId, totalTimeMs);
+                log.info("✅ Sync upload and migration completed (in-memory) - JobId: {} in {} ms", jobId, totalTimeMs);
                 return ResponseEntity.ok(response);
             }
 
@@ -276,76 +325,45 @@ public class MultiSheetMigrationController {
         return "JOB-" + date + "-" + random;
     }
 
-    /**
-     * Save uploaded file to disk with unique filename
-     */
-    private String saveUploadedFile(MultipartFile file, String jobId) throws IOException {
-        // Create upload directory if not exists
-        Path uploadPath = Paths.get(UPLOAD_DIR);
-        if (!Files.exists(uploadPath)) {
-            Files.createDirectories(uploadPath);
-            log.info("Created upload directory: {}", UPLOAD_DIR);
-        }
-
-        // Generate unique filename
-        String originalFilename = file.getOriginalFilename();
-        if (originalFilename == null || originalFilename.isEmpty()) {
-            throw new IOException("Invalid filename");
-        }
-        String extension = originalFilename.substring(originalFilename.lastIndexOf("."));
-        String uniqueFilename = jobId + "_" + System.currentTimeMillis() + extension;
-
-        // Save file
-        Path targetPath = uploadPath.resolve(uniqueFilename);
-        Files.copy(file.getInputStream(), targetPath, StandardCopyOption.REPLACE_EXISTING);
-
-        return targetPath.toString();
-    }
+    // Removed deprecated disk I/O helper (saveUploadedFile)
 
     /**
      * PHASE 2: Validate sheet structure BEFORE saving file
      * Uses SAX streaming to check sheet names without loading entire file into memory
      * 
-     * @param file MultipartFile uploaded by user
+     * @param inputStream InputStream from byte array (in memory)
      * @return Map with validation result: {"error": "..."} if failed, {"valid": true, "sheetNames": [...]} if passed
      */
-    private Map<String, Object> validateSheetStructureBeforeSaving(MultipartFile file) {
+    private Map<String, Object> validateSheetStructureBeforeSaving(InputStream inputStream) {
         Map<String, Object> result = new HashMap<>();
-        List<String> requiredSheets = List.of(SHEET_NAME_CONTRACT, SHEET_NAME_CIF, SHEET_NAME_FOLDER);
+        List<String> allowedSheets = List.of(SHEET_NAME_CONTRACT, SHEET_NAME_CIF, SHEET_NAME_FOLDER);
 
-        try (InputStream inputStream = file.getInputStream()) {
+        try {
             // Use SAX streaming to read sheet names without loading entire file
-            OPCPackage pkg = OPCPackage.open(inputStream);
-            XSSFReader reader = new XSSFReader(pkg);
-            XSSFReader.SheetIterator iterator = (XSSFReader.SheetIterator) reader.getSheetsData();
+            try (OPCPackage pkg = OPCPackage.open(inputStream)) {
+                XSSFReader reader = new XSSFReader(pkg);
+                XSSFReader.SheetIterator iterator = (XSSFReader.SheetIterator) reader.getSheetsData();
 
-            List<String> foundSheetNames = new ArrayList<>();
-            while (iterator.hasNext()) {
-                iterator.next();
-                String sheetName = iterator.getSheetName();
-                foundSheetNames.add(sheetName);
-            }
+                List<String> foundSheetNames = new ArrayList<>();
+                while (iterator.hasNext()) {
+                    iterator.next();
+                    String sheetName = iterator.getSheetName();
+                    foundSheetNames.add(sheetName);
+                }
 
-            pkg.close();
-
-            // Validate required sheets exist
-            List<String> missingSheets = requiredSheets.stream()
-                    .filter(sheet -> !foundSheetNames.contains(sheet))
+            // Determine which allowed sheets are present (sheets are optional)
+            List<String> presentAllowedSheets = allowedSheets.stream()
+                    .filter(foundSheetNames::contains)
                     .toList();
 
-            if (!missingSheets.isEmpty()) {
-                result.put("error", "Excel file is missing required sheets: " + missingSheets);
-                result.put("foundSheets", foundSheetNames);
-                result.put("requiredSheets", requiredSheets);
-                log.warn("❌ Sheet structure validation failed. Missing sheets: {}", missingSheets);
-                return result;
-            }
-
             // Success
-            result.put("valid", true);
-            result.put("sheetNames", foundSheetNames);
-            result.put("totalSheets", foundSheetNames.size());
-            log.info("✅ Sheet structure validation passed. Found all {} required sheets", requiredSheets.size());
+                result.put("valid", true);
+                result.put("sheetNames", foundSheetNames);
+                result.put("totalSheets", foundSheetNames.size());
+                result.put("presentAllowedSheets", presentAllowedSheets);
+                result.put("allowedSheets", allowedSheets);
+                log.info("✅ Sheet structure validation passed. Present sheets (allowed subset): {}", presentAllowedSheets);
+            }
 
         } catch (Exception e) {
             log.error("Error during sheet structure validation: {}", e.getMessage(), e);
@@ -360,29 +378,29 @@ public class MultiSheetMigrationController {
      * Uses ExcelDimensionValidator with SAX streaming for constant memory footprint
      * Checks that each sheet has <= MAX_ROWS_PER_SHEET (10,000 rows)
      * 
-     * @param file MultipartFile uploaded by user
+     * @param inputStream InputStream from byte array (in memory)
      * @return Map with validation result: {"error": "..."} if failed, {"valid": true, "sheetRowCounts": {...}} if passed
      */
-    private Map<String, Object> validateSheetDimensionsBeforeSaving(MultipartFile file) {
+    private Map<String, Object> validateSheetDimensionsBeforeSaving(InputStream inputStream, int maxRowsPerSheet) {
         Map<String, Object> result = new HashMap<>();
 
-        try (InputStream inputStream = file.getInputStream()) {
+        try {
             // Use ExcelDimensionValidator.validateAllSheets() for memory-efficient validation
             // Parameters: (inputStream, maxRows, startRowIndex)
             Map<String, Integer> sheetRowCounts = 
-                ExcelDimensionValidator.validateAllSheets(inputStream, MAX_ROWS_PER_SHEET, 1);
+                ExcelDimensionValidator.validateAllSheets(inputStream, maxRowsPerSheet, 1);
 
             // Check if any sheet exceeds limit
             List<String> oversizedSheets = sheetRowCounts.entrySet().stream()
-                    .filter(entry -> entry.getValue() > MAX_ROWS_PER_SHEET)
+                    .filter(entry -> entry.getValue() > maxRowsPerSheet)
                     .map(entry -> String.format("%s (%d rows)", entry.getKey(), entry.getValue()))
                     .toList();
 
             if (!oversizedSheets.isEmpty()) {
                 result.put("error", String.format("Sheets exceed maximum row limit of %d: %s", 
-                    MAX_ROWS_PER_SHEET, oversizedSheets));
+                    maxRowsPerSheet, oversizedSheets));
                 result.put("sheetRowCounts", sheetRowCounts);
-                result.put("maxAllowedRows", MAX_ROWS_PER_SHEET);
+                result.put("maxAllowedRows", maxRowsPerSheet);
                 log.warn("❌ Dimension validation failed. Oversized sheets: {}", oversizedSheets);
                 return result;
             }
@@ -390,13 +408,14 @@ public class MultiSheetMigrationController {
             // Success
             result.put("valid", true);
             result.put("sheetRowCounts", sheetRowCounts);
-            result.put("maxAllowedRows", MAX_ROWS_PER_SHEET);
+            result.put("maxAllowedRows", maxRowsPerSheet);
             log.info("✅ Dimension validation passed. All sheets within {} row limit: {}", 
-                MAX_ROWS_PER_SHEET, sheetRowCounts);
+                maxRowsPerSheet, sheetRowCounts);
 
         } catch (Exception e) {
             log.error("Error during dimension validation: {}", e.getMessage(), e);
             result.put("error", "Failed to validate Excel dimensions: " + e.getMessage());
+            result.put("maxAllowedRows", maxRowsPerSheet);
         }
 
         return result;
@@ -407,14 +426,14 @@ public class MultiSheetMigrationController {
      * Validates that column headers in first row match expected DTO field names
      * Returns warnings only, does not block processing
      * 
-     * @param file MultipartFile uploaded by user
+     * @param inputStream InputStream from byte array (in memory)
      * @return Map with warnings: {"warnings": [...]} if mismatches found, {"valid": true} otherwise
      */
-    private Map<String, Object> validateTemplateStructureBeforeSaving(MultipartFile file) {
+    private Map<String, Object> validateTemplateStructureBeforeSaving(InputStream inputStream) {
         Map<String, Object> result = new HashMap<>();
         List<String> warnings = new ArrayList<>();
 
-        try (InputStream inputStream = file.getInputStream()) {
+        try {
             // Define expected column headers for each sheet (English field names)
             Map<String, List<String>> expectedHeaders = Map.of(
                 SHEET_NAME_CONTRACT, List.of(
@@ -435,25 +454,21 @@ public class MultiSheetMigrationController {
             );
 
             // Use SAX streaming to read first row headers for each sheet
-            OPCPackage pkg = OPCPackage.open(inputStream);
-            XSSFReader reader = new XSSFReader(pkg);
-            XSSFReader.SheetIterator iterator = (XSSFReader.SheetIterator) reader.getSheetsData();
+            try (OPCPackage pkg = OPCPackage.open(inputStream)) {
+                XSSFReader reader = new XSSFReader(pkg);
+                XSSFReader.SheetIterator iterator = (XSSFReader.SheetIterator) reader.getSheetsData();
 
-            while (iterator.hasNext()) {
-                InputStream sheetStream = iterator.next();
-                String sheetName = iterator.getSheetName();
+                while (iterator.hasNext()) {
+                    iterator.next(); // Move to next sheet
+                    String sheetName = iterator.getSheetName();
 
-                // Only validate required sheets
-                if (!expectedHeaders.containsKey(sheetName)) {
-                    continue;
+                    if (!expectedHeaders.containsKey(sheetName)) {
+                        continue;
+                    }
+
+                    warnings.add(String.format("Template validation for sheet '%s' skipped (not yet implemented)", sheetName));
                 }
-
-                // Read first row headers (simplified - would need full SAX parser for production)
-                // For now, just add placeholder warning
-                warnings.add(String.format("Template validation for sheet '%s' skipped (not yet implemented)", sheetName));
             }
-
-            pkg.close();
 
             // Success (even with warnings)
             result.put("valid", true);
@@ -473,64 +488,9 @@ public class MultiSheetMigrationController {
         return result;
     }
 
-    /**
-     * Validate Excel structure: Must contain 3 sheets (HOPD, CIF, TAP)
-     */
-    private Map<String, Object> validateExcelStructure(String filePath) {
-        Map<String, Object> result = new HashMap<>();
+    // Removed unused Excel structure validator (obsolete)
 
-        try {
-            // Use Apache POI to validate Excel structure
-            org.apache.poi.ss.usermodel.Workbook workbook = 
-                org.apache.poi.ss.usermodel.WorkbookFactory.create(new File(filePath));
-
-            int sheetCount = workbook.getNumberOfSheets();
-            List<String> sheetNames = new java.util.ArrayList<>();
-            
-            for (int i = 0; i < sheetCount; i++) {
-                sheetNames.add(workbook.getSheetName(i));
-            }
-
-            workbook.close();
-
-            // Validate required sheets
-            List<String> requiredSheets = List.of("HOPD", "CIF", "TAP");
-            List<String> missingSheets = requiredSheets.stream()
-                    .filter(sheet -> !sheetNames.contains(sheet))
-                    .toList();
-
-            if (!missingSheets.isEmpty()) {
-                result.put("error", "Excel file is missing required sheets: " + missingSheets);
-                result.put("foundSheets", sheetNames);
-                result.put("requiredSheets", requiredSheets);
-                return result;
-            }
-
-            // Success
-            result.put("valid", true);
-            result.put("totalSheets", sheetCount);
-            result.put("sheetNames", sheetNames);
-            result.put("requiredSheets", requiredSheets);
-
-        } catch (Exception e) {
-            log.error("Error validating Excel structure: {}", e.getMessage(), e);
-            result.put("error", "Invalid Excel file format: " + e.getMessage());
-        }
-
-        return result;
-    }
-
-    /**
-     * Delete file from disk
-     */
-    private void deleteFile(String filePath) {
-        try {
-            Files.deleteIfExists(Paths.get(filePath));
-            log.info("Deleted file: {}", filePath);
-        } catch (IOException e) {
-            log.warn("Failed to delete file: {}", filePath, e);
-        }
-    }
+    // Removed unused deleteFile helper (obsolete)
 
     /**
      * Fallback method for upload circuit breaker
@@ -554,10 +514,12 @@ public class MultiSheetMigrationController {
      * POST /api/migration/multisheet/start
      *
      * Protected by circuit breaker and rate limiting for resilience
+     * @deprecated Use /upload endpoint with MultipartFile for better resource management
      */
+    @Deprecated
     @PostMapping("/start")
-    @Operation(summary = "Start multi-sheet migration",
-               description = "Process all enabled sheets in Excel file with parallel processing")
+    @Operation(summary = "Start multi-sheet migration (deprecated)",
+               description = "Process all enabled sheets in Excel file with parallel processing. Use /upload instead.")
     @CircuitBreaker(name = "multiSheetMigration", fallbackMethod = "startMigrationFallback")
     @RateLimiter(name = "multiSheetMigration")
     public ResponseEntity<Map<String, Object>> startMigration(@Valid @RequestBody MigrationStartRequest request) {

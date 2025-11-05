@@ -88,6 +88,14 @@ public class MigrationJobSheetEntity {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
+    /**
+     * Optimistic locking version field
+     * Prevents lost updates in concurrent scenarios
+     */
+    @Version
+    @Column(name = "version", nullable = false)
+    private Long version;
+
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -97,6 +105,9 @@ public class MigrationJobSheetEntity {
         }
         if (status == null) {
             status = "PENDING";
+        }
+        if (version == null) {
+            version = 0L;
         }
     }
 
