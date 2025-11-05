@@ -147,7 +147,7 @@ public class SheetIngestService {
 
     /**
      * SAX handler for ingesting Excel rows into staging table
-     * TODO: Implement actual field mapping and business key generation per sheet type
+     * Maps Excel columns to database columns and normalizes values
      */
     private static class IngestHandler implements XSSFSheetXMLHandler.SheetContentsHandler {
         private final String jobId;
@@ -159,8 +159,9 @@ public class SheetIngestService {
         private int rowCount = 0;
         private int currentRow = -1;
         private List<String> currentRowData = new ArrayList<>();
-        @SuppressWarnings("unused")
-        private List<String> headers = null; // TODO: Will be used for field mapping
+        private SheetColumnMapper columnMapper;
+        private List<String> dbColumnOrder; // Ordered list of DB columns for INSERT
+        private String insertSql; // Prepared INSERT SQL statement
 
         public IngestHandler(String jobId, String stagingTable, SheetMigrationConfig.SheetConfig sheetConfig,
                              JdbcTemplate jdbcTemplate, int batchSize) {
@@ -180,38 +181,61 @@ public class SheetIngestService {
         @Override
         public void endRow(int rowNum) {
             if (currentRow == 0) {
-                // Store header row for field mapping
-                headers = new ArrayList<>(currentRowData);
+                // Initialize column mapper with headers
+                try {
+                    columnMapper = new SheetColumnMapper(sheetConfig.getName(), currentRowData);
+                    dbColumnOrder = columnMapper.getDbColumnOrder();
+                    buildInsertSql();
+                    log.debug("Initialized column mapper for sheet: {} with {} columns", 
+                             sheetConfig.getName(), dbColumnOrder.size());
+                } catch (Exception e) {
+                    log.error("Failed to initialize column mapper: {}", e.getMessage(), e);
+                    throw new RuntimeException("Failed to initialize column mapper", e);
+                }
                 return;
             }
 
-            // Build row data: job_id, row_num, sheet_name, business_key, ...field values
-            // TODO: Generate business_key based on sheet-specific logic
-            String businessKey = String.format("%s_%s_%d", jobId, sheetConfig.getName(), currentRow);
-            
-            Object[] rowData = new Object[currentRowData.size() + 4]; // +4 for job_id, row_num, sheet_name, business_key
-            rowData[0] = jobId;
-            rowData[1] = currentRow;
-            rowData[2] = sheetConfig.getName();
-            rowData[3] = businessKey;
-
-            // Map columns to fields
-            for (int i = 0; i < currentRowData.size(); i++) {
-                rowData[i + 4] = currentRowData.get(i);
+            // Skip if column mapper not initialized
+            if (columnMapper == null) {
+                log.warn("Column mapper not initialized, skipping row {}", currentRow);
+                return;
             }
 
-            batchBuffer.add(rowData);
-            rowCount++;
+            try {
+                // Generate business key
+                String businessKey = columnMapper.generateBusinessKey(currentRowData);
+                
+                // Build row data: job_id, row_num, sheet_name, business_key, ...normalized field values
+                Object[] rowData = new Object[4 + dbColumnOrder.size()];
+                rowData[0] = jobId;
+                rowData[1] = currentRow;
+                rowData[2] = sheetConfig.getName();
+                rowData[3] = businessKey;
 
-            // Batch insert when buffer is full
-            if (batchBuffer.size() >= batchSize) {
-                flush();
+                // Map and normalize values for each DB column
+                for (int i = 0; i < dbColumnOrder.size(); i++) {
+                    String dbColumn = dbColumnOrder.get(i);
+                    String normalizedValue = columnMapper.getValueForColumn(currentRowData, dbColumn);
+                    rowData[i + 4] = normalizedValue;
+                }
+
+                batchBuffer.add(rowData);
+                rowCount++;
+
+                // Batch insert when buffer is full
+                if (batchBuffer.size() >= batchSize) {
+                    flush();
+                }
+            } catch (Exception e) {
+                log.error("Error processing row {}: {}", currentRow, e.getMessage(), e);
+                // Continue processing other rows
             }
         }
 
         @Override
         public void cell(String cellReference, String formattedValue, XSSFComment comment) {
-            currentRowData.add(formattedValue);
+            // Handle null or empty values
+            currentRowData.add(formattedValue != null ? formattedValue : "");
         }
 
         @Override
@@ -224,29 +248,40 @@ public class SheetIngestService {
             flush();
         }
 
+        /**
+         * Build INSERT SQL statement with all DB columns
+         */
+        private void buildInsertSql() {
+            StringBuilder sql = new StringBuilder(
+                String.format("INSERT INTO %s (job_id, row_num, sheet_name, business_key", stagingTable));
+            StringBuilder valuePlaceholders = new StringBuilder("(?, ?, ?, ?");
+
+            for (String dbColumn : dbColumnOrder) {
+                sql.append(", ").append(dbColumn);
+                valuePlaceholders.append(", ?");
+            }
+
+            sql.append(", created_at) VALUES ").append(valuePlaceholders).append(", CURRENT_TIMESTAMP)");
+            insertSql = sql.toString();
+            log.debug("Built INSERT SQL: {}", insertSql);
+        }
+
         public void flush() {
             if (batchBuffer.isEmpty()) {
                 return;
             }
 
-            // TODO: Generate INSERT SQL based on actual staging table schema
-            // For now, use generic placeholder that will need sheet-specific implementation
-            int fieldCount = batchBuffer.get(0).length - 4; // Subtract fixed fields
-            StringBuilder sql = new StringBuilder(
-                String.format("INSERT INTO %s (job_id, row_num, sheet_name, business_key", stagingTable));
-            StringBuilder valuePlaceholders = new StringBuilder("(?, ?, ?, ?");
-
-            for (int i = 0; i < fieldCount; i++) {
-                sql.append(", col_").append(i); // Placeholder - will use actual column names from schema
-                valuePlaceholders.append(", ?");
+            if (insertSql == null) {
+                log.warn("INSERT SQL not built, skipping flush");
+                batchBuffer.clear();
+                return;
             }
 
-            sql.append(", created_at) VALUES ").append(valuePlaceholders).append(", CURRENT_TIMESTAMP)");
-
             try {
-                jdbcTemplate.batchUpdate(sql.toString(), batchBuffer);
+                int[] updateCounts = jdbcTemplate.batchUpdate(insertSql, batchBuffer);
+                log.debug("Flushed {} rows to {}", updateCounts.length, stagingTable);
             } catch (Exception e) {
-                // Log and rethrow - TODO: implement error handling per row
+                log.error("Batch insert failed for {} rows: {}", batchBuffer.size(), e.getMessage(), e);
                 throw new RuntimeException("Batch insert failed: " + e.getMessage(), e);
             }
             

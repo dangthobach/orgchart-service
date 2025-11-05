@@ -152,57 +152,57 @@ public class MultiSheetProcessor {
 
     /**
      * Process sheets in parallel using ExecutorService FROM MEMORY
+     * FIXED: Uses try-finally to prevent memory leak if exception occurs
      */
     private List<SheetProcessResult> processInParallelFromMemory(String jobId,
                                                                    byte[] fileBytes,
                                                                    List<SheetMigrationConfig.SheetConfig> sheets) {
         int maxThreads = config.getGlobal().getMaxConcurrentSheets();
         ExecutorService executor = Executors.newFixedThreadPool(maxThreads);
-        this.currentExecutor = executor;
-        List<Future<SheetProcessResult>> futures = new ArrayList<>();
 
-        log.info("Processing {} sheets in parallel (in-memory) with {} threads", sheets.size(), maxThreads);
-
-        for (SheetMigrationConfig.SheetConfig sheetConfig : sheets) {
-            Future<SheetProcessResult> future = executor.submit(() -> {
-                try {
-                    return processSheetFromMemory(jobId, fileBytes, sheetConfig);
-                } catch (Exception e) {
-                    log.error("Uncaught exception in sheet processing thread for sheet: {}",
-                              sheetConfig.getName(), e);
-                    updateSheetStatus(jobId, sheetConfig.getName(), "FAILED", e.getMessage());
-                    return SheetProcessResult.error(sheetConfig.getName(),
-                            "Thread exception: " + e.getMessage());
-                }
-            });
-            futures.add(future);
-        }
-
-        List<SheetProcessResult> results = new ArrayList<>();
-        for (Future<SheetProcessResult> future : futures) {
-            try {
-                SheetProcessResult result = future.get(30, TimeUnit.MINUTES);
-                results.add(result);
-            } catch (TimeoutException e) {
-                log.error("Sheet processing timeout after 30 minutes", e);
-                results.add(SheetProcessResult.timeout("Unknown", "Timeout after 30 minutes"));
-            } catch (Exception e) {
-                log.error("Error waiting for sheet processing", e);
-                results.add(SheetProcessResult.error("Unknown", e.getMessage()));
-            }
-        }
-
-        executor.shutdown();
         try {
-            if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
-                executor.shutdownNow();
-            }
-        } catch (InterruptedException e) {
-            executor.shutdownNow();
-            Thread.currentThread().interrupt();
-        }
+            this.currentExecutor = executor; // Track for graceful shutdown
+            List<Future<SheetProcessResult>> futures = new ArrayList<>();
 
-        return results;
+            log.info("Processing {} sheets in parallel (in-memory) with {} threads", sheets.size(), maxThreads);
+
+            // Submit tasks for each sheet with error handling
+            for (SheetMigrationConfig.SheetConfig sheetConfig : sheets) {
+                Future<SheetProcessResult> future = executor.submit(() -> {
+                    try {
+                        return processSheetFromMemory(jobId, fileBytes, sheetConfig);
+                    } catch (Exception e) {
+                        log.error("Uncaught exception in sheet processing thread for sheet: {}",
+                                  sheetConfig.getName(), e);
+                        updateSheetStatus(jobId, sheetConfig.getName(), "FAILED", e.getMessage());
+                        return SheetProcessResult.error(sheetConfig.getName(),
+                                "Thread exception: " + e.getMessage());
+                    }
+                });
+                futures.add(future);
+            }
+
+            // Wait for all sheets to complete
+            List<SheetProcessResult> results = new ArrayList<>();
+            for (Future<SheetProcessResult> future : futures) {
+                try {
+                    SheetProcessResult result = future.get(30, TimeUnit.MINUTES);
+                    results.add(result);
+                } catch (TimeoutException e) {
+                    log.error("Sheet processing timeout after 30 minutes", e);
+                    results.add(SheetProcessResult.timeout("Unknown", "Timeout after 30 minutes"));
+                } catch (Exception e) {
+                    log.error("Error waiting for sheet processing", e);
+                    results.add(SheetProcessResult.error("Unknown", e.getMessage()));
+                }
+            }
+
+            return results;
+
+        } finally {
+            // ✅ ALWAYS shutdown executor (even if exception occurs)
+            shutdownExecutor(executor);
+        }
     }
 
     /**
@@ -607,6 +607,33 @@ public class MultiSheetProcessor {
                 .totalInsertedRows(totalInserted)
                 .sheetResults(results)
                 .build();
+    }
+
+    /**
+     * Gracefully shutdown executor with timeout
+     * Used by processInParallelFromMemory() to prevent memory leak
+     */
+    private void shutdownExecutor(ExecutorService executor) {
+        if (executor == null || executor.isShutdown()) {
+            return;
+        }
+
+        log.info("Shutting down executor gracefully...");
+        executor.shutdown();
+
+        try {
+            if (!executor.awaitTermination(60, TimeUnit.SECONDS)) {
+                log.warn("Executor did not terminate within 60s, forcing shutdown...");
+                List<Runnable> droppedTasks = executor.shutdownNow();
+                log.warn("Dropped {} tasks during forced shutdown", droppedTasks.size());
+            } else {
+                log.info("Executor shutdown completed successfully");
+            }
+        } catch (InterruptedException e) {
+            log.error("Shutdown interrupted, forcing immediate shutdown", e);
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
     }
 
     /**
