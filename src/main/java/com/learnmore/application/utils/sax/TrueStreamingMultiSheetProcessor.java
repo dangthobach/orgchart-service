@@ -171,6 +171,7 @@ public class TrueStreamingMultiSheetProcessor {
     
     /**
      * Process single sheet using SAX with streaming
+     * Uses shared styles/strings/dataFormatter from the already-opened OPCPackage
      */
     private TrueStreamingSAXProcessor.ProcessingResult processSheetWithSAX(
             InputStream sheetStream,
@@ -179,12 +180,7 @@ public class TrueStreamingMultiSheetProcessor {
             org.apache.poi.xssf.model.SharedStringsTable sharedStringsTable,
             DataFormatter dataFormatter) throws Exception {
         
-        // Note: We can't directly use the processor's internal handler here
-        // because it's designed to work with the full processExcelStreamTrue method
-        // For now, delegate to the processor's main method
-        
-        // This is a simplified approach - in practice, you might need to refactor
-        // TrueStreamingSAXProcessor to expose its content handler
-        return processor.processExcelStreamTrue(sheetStream);
+        // Use processor's new method to process sheet stream with shared resources
+        return processor.processSheetStream(sheetStream, stylesTable, sharedStringsTable, dataFormatter);
     }
 }

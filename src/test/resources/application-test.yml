@@ -50,3 +50,60 @@ performance:
     enable-memory-monitoring: true
     batch-size: 5000
     max-memory-threshold: 2048
+
+# Multi-Sheet Migration Configuration (for tests)
+sheets:
+  - name: "HSBG_theo_hop_dong"
+    enabled: true
+    order: 1
+    description: "Hồ sơ bàn giao theo hợp đồng"
+    dtoClass: "com.learnmore.application.dto.migration.sheet.HopDongDTO"
+    stagingRawTable: "staging_raw_hopd"
+    stagingValidTable: "staging_valid_hopd"
+    stagingErrorTable: "staging_error_multisheet"
+    masterTable: "case_detail"
+    batchSize: 5000
+    parallelProcessing: false
+    enableMasking: true
+    validationRules: []
+  - name: "HSBG_theo_CIF"
+    enabled: true
+    order: 2
+    description: "Hồ sơ bàn giao theo CIF khách hàng"
+    dtoClass: "com.learnmore.application.dto.migration.sheet.CifDTO"
+    stagingRawTable: "staging_raw_cif"
+    stagingValidTable: "staging_valid_cif"
+    stagingErrorTable: "staging_error_multisheet"
+    masterTable: "case_detail_cif"
+    batchSize: 5000
+    parallelProcessing: false
+    enableMasking: true
+    validationRules: []
+  - name: "HSBG_theo_tap"
+    enabled: true
+    order: 3
+    description: "Hồ sơ bàn giao theo tập"
+    dtoClass: "com.learnmore.application.dto.migration.sheet.TapDTO"
+    stagingRawTable: "staging_raw_tap"
+    stagingValidTable: "staging_valid_tap"
+    stagingErrorTable: "staging_error_multisheet"
+    masterTable: "case_detail_tap"
+    batchSize: 5000
+    parallelProcessing: false
+    enableMasking: false
+    validationRules: []
+
+global:
+  ingestTimeout: 300000
+  validationTimeout: 600000
+  insertionTimeout: 900000
+  enableMonitoring: true
+  progressUpdateInterval: 5000
+  stopOnFirstError: false
+  maxErrorsPerSheet: 10000
+  continueOnSheetFailure: true
+  useParallelSheetProcessing: true
+  maxConcurrentSheets: 3
+  autoCleanupOnSuccess: false
+  autoCleanupOnFailure: false
+  retentionDays: 30

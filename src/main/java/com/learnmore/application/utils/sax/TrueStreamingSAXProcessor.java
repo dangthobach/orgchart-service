@@ -106,6 +106,47 @@ public class TrueStreamingSAXProcessor<T> {
         );
     }
     
+    /**
+     * Process a single sheet stream with provided shared resources (styles, strings, formatter)
+     * This is used by TrueStreamingMultiSheetProcessor to avoid reopening OPCPackage for each sheet
+     */
+    public ProcessingResult processSheetStream(
+            InputStream sheetStream,
+            StylesTable stylesTable,
+            org.apache.poi.xssf.model.SharedStringsTable sharedStringsTable,
+            DataFormatter dataFormatter) throws Exception {
+        
+        // True streaming content handler - xử lý từng batch ngay
+        TrueStreamingContentHandler contentHandler = new TrueStreamingContentHandler();
+        
+        // Setup SAX parser
+        XMLReader xmlReader = SAXParserFactory.newInstance().newSAXParser().getXMLReader();
+        
+        XSSFSheetXMLHandler sheetHandler = new XSSFSheetXMLHandler(
+            stylesTable, sharedStringsTable, contentHandler, dataFormatter, false
+        );
+        xmlReader.setContentHandler(sheetHandler);
+        
+        // Process sheet stream directly
+        xmlReader.parse(new InputSource(sheetStream));
+        
+        // Flush remaining batch
+        contentHandler.flushRemainingBatch();
+        
+        long processingTime = System.currentTimeMillis() - startTime;
+        
+        // Throw if no data rows were processed
+        if (totalProcessed.get() == 0) {
+            throw new RuntimeException("Tập không có dữ liệu");
+        }
+        
+        return new ProcessingResult(
+            totalProcessed.get(), 
+            totalErrors.get(), 
+            processingTime
+        );
+    }
+    
     // fieldMapping removed; MethodHandleMapper handles both Excel column names and direct field names
     
     /**
