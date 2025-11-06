@@ -12,14 +12,14 @@ rules:
     enabled: true
     description: "Validate required fields for HopDong sheet"
     fields:
-      - khoVpbank
-      - maDonVi
-      - soHopDong
-      - soLuongTap
-      - ngayGiaiNgan
-      - loaiHoSo
-      - phanHanCapTd
-      - maThung
+      - vpbankWarehouse
+      - unitCode
+      - contractNumber
+      - folderQuantity
+      - disbursementDate
+      - documentType
+      - retentionPeriodCategory
+      - boxCode
 
   hop_dong_date_formats:
     type: DATE_FORMAT
@@ -27,22 +27,22 @@ rules:
     description: "Validate date formats"
     dateFormat: "yyyy-MM-dd"
     fields:
-      - ngayPhaiBanGiao
-      - ngayBanGiao
-      - ngayGiaiNgan
-      - ngayDenHan
-      - ngayDuKienTieuHuy
-      - ngayNhapKhoVpbank
-      - ngayChuyenKhoCrown
+      - requiredHandoverDate
+      - actualHandoverDate
+      - disbursementDate
+      - dueDate
+      - expectedDestructionDate
+      - vpbankWarehouseEntryDate
+      - crownWarehouseTransferDate
 
   hop_dong_enum_values:
     type: ENUM_VALUES
     enabled: true
     description: "Validate enum field values"
     rules:
-      loaiHoSo:
+      documentType:
         allowedValues: [LD, MD, CC, OD, TTK, HDHM, TSBD, KSSV, "Bao thanh toán", "Biên nhận thế chấp"]
-      phanHanCapTd:
+      retentionPeriodCategory:
         allowedValues: ["Vĩnh viễn", "Ngắn hạn", "Trung hạn", "Dài hạn"]
 
   hop_dong_business_logic:
@@ -51,18 +51,18 @@ rules:
     description: "Business logic validation"
     rules:
       - name: "validate_destruction_date"
-        description: "Ngày dự kiến tiêu hủy must match phanHanCapTd"
-        field: "ngayDuKienTieuHuy"
+        description: "Ngày dự kiến tiêu hủy must match retentionPeriodCategory"
+        field: "expectedDestructionDate"
         customValidator: "HopDongBusinessRuleValidator.validateDestructionDate"
 
       - name: "validate_ma_thung_format"
         description: "Mã thùng: chỉ chữ in hoa, số, dấu gạch dưới"
-        field: "maThung"
+        field: "boxCode"
         pattern: "^[A-Z0-9_]+$"
 
       - name: "validate_thoi_han_cap_td"
         description: "Thời hạn cấp TD phải là số nguyên dương"
-        field: "thoiHanCapTd"
+        field: "retentionPeriodYears"
         dataType: "INTEGER_POSITIVE"
 
   hop_dong_duplicate_check:
@@ -70,26 +70,26 @@ rules:
     enabled: true
     description: "Check duplicate within file and DB"
     rules:
-      - condition: "loaiHoSo IN (LD,MD,OD,HDHM,KSSV,Bao thanh toán,Biên nhận thế chấp)"
-        businessKey: ["soHopDong", "loaiHoSo", "ngayGiaiNgan"]
+      - condition: "documentType IN (LD,MD,OD,HDHM,KSSV,Bao thanh toán,Biên nhận thế chấp)"
+        businessKey: ["contractNumber", "documentType", "disbursementDate"]
 
-      - condition: "loaiHoSo IN (CC,TSBD)"
-        businessKey: ["soHopDong", "loaiHoSo", "soCif"]
+      - condition: "documentType IN (CC,TSBD)"
+        businessKey: ["contractNumber", "documentType", "customerCif"]
 
-      - condition: "loaiHoSo = TTK"
-        businessKey: ["soHopDong", "loaiHoSo", "soCif", "maDonVi", "ngayGiaiNgan"]
+      - condition: "documentType = TTK"
+        businessKey: ["contractNumber", "documentType", "customerCif", "unitCode", "disbursementDate"]
 
   hop_dong_master_references:
     type: MASTER_REFERENCE
     enabled: true
     description: "Validate references to master tables"
     references:
-      - field: "khoVpbank"
+      - field: "vpbankWarehouse"
         masterTable: "warehouse"
         masterColumn: "code"
         condition: "is_active = true"
 
-      - field: "maDonVi"
+      - field: "unitCode"
         masterTable: "unit"
         masterColumn: "code"
         condition: "is_active = true"
@@ -102,15 +102,15 @@ rules:
     enabled: true
     description: "Validate required fields for CIF sheet"
     fields:
-      - khoVpbank
-      - maDonVi
-      - soCif
-      - soLuongTap
-      - ngayGiaiNgan
-      - loaiHoSo
-      - luongHoSo
-      - phanHanCapTd
-      - maThung
+      - vpbankWarehouse
+      - unitCode
+      - customerCif
+      - folderQuantity
+      - disbursementDate
+      - documentType
+      - documentFlow
+      - retentionPeriodCategory
+      - boxCode
 
   cif_date_formats:
     type: DATE_FORMAT
@@ -118,22 +118,22 @@ rules:
     description: "Validate date formats"
     dateFormat: "yyyy-MM-dd"
     fields:
-      - ngayPhaiBanGiao
-      - ngayBanGiao
-      - ngayGiaiNgan
-      - ngayNhapKhoVpbank
-      - ngayChuyenKhoCrown
+      - requiredHandoverDate
+      - actualHandoverDate
+      - disbursementDate
+      - vpbankWarehouseEntryDate
+      - crownWarehouseTransferDate
 
   cif_enum_values:
     type: ENUM_VALUES
     enabled: true
     description: "Validate enum field values"
     rules:
-      loaiHoSo:
+      documentType:
         allowedValues: ["PASS TTN", "SCF VEERFIN", "Trình cấp TD không qua CPC", "Hồ sơ mở TKTT nhưng không giải ngân"]
-      luongHoSo:
+      documentFlow:
         allowedValues: ["HSTD thường"]
-      phanHanCapTd:
+      retentionPeriodCategory:
         allowedValues: ["Vĩnh viễn"]
 
   cif_business_logic:
@@ -143,7 +143,7 @@ rules:
     rules:
       - name: "validate_ma_thung_format"
         description: "Mã thùng: chỉ chữ in hoa, số, dấu gạch dưới"
-        field: "maThung"
+        field: "boxCode"
         pattern: "^[A-Z0-9_]+$"
 
   cif_duplicate_check:
@@ -151,14 +151,14 @@ rules:
     enabled: true
     description: "Check duplicate: CIF + Ngày giải ngân + Loại HS"
     rules:
-      - businessKey: ["soCif", "ngayGiaiNgan", "loaiHoSo"]
+      - businessKey: ["customerCif", "disbursementDate", "documentType"]
 
   cif_master_references:
     type: MASTER_REFERENCE
     enabled: true
     description: "Validate references to master tables"
     references:
-      - field: "khoVpbank"
+      - field: "vpbankWarehouse"
         masterTable: "warehouse"
         masterColumn: "code"
         condition: "is_active = true"
@@ -171,17 +171,17 @@ rules:
     enabled: true
     description: "Validate required fields for Tap sheet"
     fields:
-      - khoVpbank
-      - maDonVi
-      - trachNhiemBanGiao
-      - thangPhatSinh
-      - soLuongTap
-      - loaiHoSo
-      - luongHoSo
-      - phanHanCapTd
-      - ngayDuKienTieuHuy
-      - sanPham
-      - maThung
+      - vpbankWarehouse
+      - unitCode
+      - handoverResponsibility
+      - incidentMonth
+      - folderQuantity
+      - documentType
+      - documentFlow
+      - retentionPeriodCategory
+      - expectedDestructionDate
+      - product
+      - boxCode
 
   tap_date_formats:
     type: DATE_FORMAT
@@ -189,24 +189,24 @@ rules:
     description: "Validate date formats"
     dateFormat: "yyyy-MM-dd"
     fields:
-      - ngayPhaiBanGiao
-      - ngayBanGiao
-      - ngayDuKienTieuHuy
-      - ngayNhapKhoVpbank
-      - ngayChuyenKhoCrown
+      - requiredHandoverDate
+      - actualHandoverDate
+      - expectedDestructionDate
+      - vpbankWarehouseEntryDate
+      - crownWarehouseTransferDate
 
   tap_enum_values:
     type: ENUM_VALUES
     enabled: true
     description: "Validate enum field values"
     rules:
-      loaiHoSo:
+      documentType:
         allowedValues: ["KSSV"]
-      luongHoSo:
+      documentFlow:
         allowedValues: ["HSTD thường"]
-      phanHanCapTd:
+      retentionPeriodCategory:
         allowedValues: ["Vĩnh viễn"]
-      sanPham:
+      product:
         allowedValues: ["KSSV"]
 
   tap_business_logic:
@@ -216,12 +216,12 @@ rules:
     rules:
       - name: "validate_destruction_date_9999"
         description: "Ngày dự kiến tiêu hủy must be 31-Dec-9999"
-        field: "ngayDuKienTieuHuy"
+        field: "expectedDestructionDate"
         customValidator: "TapBusinessRuleValidator.validateDestructionDate9999"
 
       - name: "validate_ma_thung_format"
         description: "Mã thùng: chỉ chữ in hoa, số, dấu gạch dưới"
-        field: "maThung"
+        field: "boxCode"
         pattern: "^[A-Z0-9_]+$"
 
   tap_duplicate_check:
@@ -229,14 +229,14 @@ rules:
     enabled: true
     description: "Check duplicate: Mã DV + TNBG + Tháng PS + Sản phẩm"
     rules:
-      - businessKey: ["maDonVi", "trachNhiemBanGiao", "thangPhatSinh", "sanPham"]
+      - businessKey: ["unitCode", "handoverResponsibility", "incidentMonth", "product"]
 
   tap_master_references:
     type: MASTER_REFERENCE
     enabled: true
     description: "Validate references to master tables"
     references:
-      - field: "khoVpbank"
+      - field: "vpbankWarehouse"
         masterTable: "warehouse"
         masterColumn: "code"
         condition: "is_active = true"
