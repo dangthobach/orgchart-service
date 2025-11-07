@@ -17,7 +17,8 @@
       "Bash(taskkill:*)",
       "Bash(curl:*)",
       "Bash(git checkout:*)",
-      "Bash(\"d:\\project\\orgchart-service\\RACE_CONDITION_FIXES_SUMMARY.md\")"
+      "Bash(\"d:\\project\\orgchart-service\\RACE_CONDITION_FIXES_SUMMARY.md\")",
+      "Bash(nul)"
     ],
     "deny": [],
     "ask": []
