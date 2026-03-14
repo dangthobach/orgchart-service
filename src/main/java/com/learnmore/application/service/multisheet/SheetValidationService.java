@@ -421,18 +421,23 @@ public class SheetValidationService {
             WHERE raw.job_id = ?
                 AND raw.sheet_name = ?
                 AND (
-                    -- Required fields check (example for hop_dong sheet)
-                    (raw.so_hop_dong_norm IS NULL OR raw.so_hop_dong_norm = '')
-                    OR (raw.ma_don_vi_norm IS NULL OR raw.ma_don_vi_norm = '')
-                    -- Date format validation (check if date columns are parseable)
-                    OR (raw.ngay_giai_ngan_norm IS NOT NULL AND raw.ngay_giai_ngan_norm != '' 
-                        AND raw.ngay_giai_ngan_norm !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-                    -- Numeric validation (example: so_luong_tap must be numeric)
-                    OR (raw.so_luong_tap_norm IS NOT NULL AND raw.so_luong_tap_norm != ''
-                        AND raw.so_luong_tap_norm !~ '^[0-9]+$')
-                    -- Enum validation (example: loai_ho_so must be in allowed list)
-                    OR (raw.loai_ho_so_norm IS NOT NULL AND raw.loai_ho_so_norm != ''
-                        AND raw.loai_ho_so_norm NOT IN ('LD', 'MD', 'CC', 'OD', 'TTK', 'HDHM', 'TSBD', 'KSSV'))
+                    -- Required fields (examples across sheets)
+                    (raw.contract_number IS NULL OR raw.contract_number = '')
+                    OR (raw.unit_code IS NULL OR raw.unit_code = '')
+                    OR (raw.document_type IS NULL OR raw.document_type = '')
+                    -- Date format validation (YYYY-MM-DD)
+                    OR (raw.disbursement_date IS NOT NULL AND raw.disbursement_date != ''
+                        AND raw.disbursement_date !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+                    OR (raw.required_handover_date IS NOT NULL AND raw.required_handover_date != ''
+                        AND raw.required_handover_date !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+                    -- Numeric validation
+                    OR (raw.folder_quantity IS NOT NULL AND raw.folder_quantity != ''
+                        AND raw.folder_quantity !~ '^[0-9]+$')
+                    OR (raw.retention_period_years IS NOT NULL AND raw.retention_period_years != ''
+                        AND raw.retention_period_years !~ '^[0-9]+$')
+                    -- Enum validation for document_type
+                    OR (raw.document_type IS NOT NULL AND raw.document_type != ''
+                        AND raw.document_type NOT IN ('LD', 'MD', 'CC', 'OD', 'TTK', 'HDHM', 'TSBD', 'KSSV'))
                 )
             ON CONFLICT (job_id, sheet_name, row_num, error_type) DO NOTHING
             """, errorTable, stagingRawTable);
@@ -474,10 +479,10 @@ public class SheetValidationService {
                 AND raw.sheet_name = ?
                 AND raw.row_num BETWEEN ? AND ?
                 AND (
-                    (raw.so_hop_dong_norm IS NULL OR raw.so_hop_dong_norm = '')
-                    OR (raw.ma_don_vi_norm IS NULL OR raw.ma_don_vi_norm = '')
-                    OR (raw.ngay_giai_ngan_norm IS NOT NULL AND raw.ngay_giai_ngan_norm != '' 
-                        AND raw.ngay_giai_ngan_norm !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+                    (raw.contract_number IS NULL OR raw.contract_number = '')
+                    OR (raw.unit_code IS NULL OR raw.unit_code = '')
+                    OR (raw.disbursement_date IS NOT NULL AND raw.disbursement_date != '' 
+                        AND raw.disbursement_date !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
                 )
             ON CONFLICT (job_id, sheet_name, row_num, error_type) DO NOTHING
             """, errorTable, stagingRawTable);
@@ -568,11 +573,11 @@ public class SheetValidationService {
      */
     private String getUniqueKeyColumnsForSheet(String sheetName) {
         if ("HSBG_theo_hop_dong".equals(sheetName)) {
-            return "so_hop_dong_norm, loai_ho_so_norm, ngay_giai_ngan_norm";
+            return "contract_number, document_type, disbursement_date";
         } else if ("HSBG_theo_CIF".equals(sheetName)) {
-            return "so_cif_norm, ngay_giai_ngan_norm, loai_ho_so_norm";
+            return "customer_cif, disbursement_date, document_type";
         } else if ("HSBG_theo_tap".equals(sheetName)) {
-            return "ma_don_vi_norm, trach_nhiem_ban_giao_norm, thang_phat_sinh_norm, san_pham_norm";
+            return "unit_code, handover_responsibility, incident_month, product";
         } else {
             return "business_key";
         }
@@ -636,7 +641,7 @@ public class SheetValidationService {
                     job_id,
                     sheet_name,
                     row_num,
-                    so_hop_dong_norm as unique_key_value
+                    contract_number as unique_key_value
                 FROM %s
                 WHERE job_id = ? AND sheet_name = ?
                 """, tempTableName, stagingRawTable);
@@ -702,7 +707,7 @@ public class SheetValidationService {
                     job_id,
                     sheet_name,
                     row_num,
-                    so_hop_dong_norm as unique_key_value
+                    contract_number as unique_key_value
                 FROM %s
                 WHERE job_id = ? AND sheet_name = ? AND row_num BETWEEN ? AND ?
                 """, tempTableName, stagingRawTable);
@@ -758,9 +763,9 @@ public class SheetValidationService {
             // Step 1: Create TEMP table with reference keys from staging
             String createTempSQL = String.format("""
                 CREATE TEMP TABLE %s AS
-                SELECT DISTINCT ma_don_vi_norm as ref_key
+                SELECT DISTINCT unit_code as ref_key
                 FROM %s
-                WHERE job_id = ? AND sheet_name = ? AND ma_don_vi_norm IS NOT NULL
+                WHERE job_id = ? AND sheet_name = ? AND unit_code IS NOT NULL
                 """, tempTableName, stagingRawTable);
 
             jdbcTemplate.update(createTempSQL, jobId, sheetName);
@@ -790,13 +795,13 @@ public class SheetValidationService {
                     raw.sheet_name,
                     raw.row_num,
                     'INVALID_REFERENCE' as error_type,
-                    'ma_don_vi' as error_field,
-                    'Invalid master reference: ma_don_vi not found' as error_message,
+                    'unit_code' as error_field,
+                    'Invalid master reference: unit_code not found' as error_message,
                     CURRENT_TIMESTAMP
                 FROM %s raw
-                LEFT JOIN %s temp ON temp.ref_key = raw.ma_don_vi_norm
+                LEFT JOIN %s temp ON temp.ref_key = raw.unit_code
                 WHERE raw.job_id = ? AND raw.sheet_name = ?
-                    AND raw.ma_don_vi_norm IS NOT NULL
+                    AND raw.unit_code IS NOT NULL
                     AND temp.ref_key IS NULL
                 ON CONFLICT (job_id, sheet_name, row_num, error_type) DO NOTHING
                 """, errorTable, stagingRawTable, tempTableName);
@@ -833,10 +838,10 @@ public class SheetValidationService {
         try {
             String createTempSQL = String.format("""
                 CREATE TEMP TABLE %s AS
-                SELECT DISTINCT ma_don_vi_norm as ref_key
+                SELECT DISTINCT unit_code as ref_key
                 FROM %s
                 WHERE job_id = ? AND sheet_name = ? AND row_num BETWEEN ? AND ?
-                    AND ma_don_vi_norm IS NOT NULL
+                    AND unit_code IS NOT NULL
                 """, tempTableName, stagingRawTable);
 
             jdbcTemplate.update(createTempSQL, jobId, sheetName, batchStartRow, batchEndRow);
@@ -857,12 +862,12 @@ public class SheetValidationService {
             String validateRefSQL = String.format("""
                 INSERT INTO %s (job_id, sheet_name, row_num, error_type, error_field, error_message, created_at)
                 SELECT raw.job_id, raw.sheet_name, raw.row_num,
-                       'INVALID_REFERENCE', 'ma_don_vi',
-                       'Invalid master reference: ma_don_vi not found', CURRENT_TIMESTAMP
+                       'INVALID_REFERENCE', 'unit_code',
+                       'Invalid master reference: unit_code not found', CURRENT_TIMESTAMP
                 FROM %s raw
-                LEFT JOIN %s temp ON temp.ref_key = raw.ma_don_vi_norm
+                LEFT JOIN %s temp ON temp.ref_key = raw.unit_code
                 WHERE raw.job_id = ? AND raw.sheet_name = ? AND raw.row_num BETWEEN ? AND ?
-                    AND raw.ma_don_vi_norm IS NOT NULL AND temp.ref_key IS NULL
+                    AND raw.unit_code IS NOT NULL AND temp.ref_key IS NULL
                 ON CONFLICT (job_id, sheet_name, row_num, error_type) DO NOTHING
                 """, errorTable, stagingRawTable, tempTableName);
 

@@ -127,6 +127,8 @@ public class MultiSheetMigrationController {
                 log.warn("❌ Sheet structure validation failed: {}", sheetValidation.get("error"));
                 return ResponseEntity.badRequest().body(sheetValidation);
             }
+            @SuppressWarnings("unchecked")
+            List<String> presentAllowedSheets = (List<String>) sheetValidation.get("presentAllowedSheets");
 
             // ============================================================
             // PHASE 3: Dimension Validation per Sheet (< 10K rows)
@@ -168,7 +170,7 @@ public class MultiSheetMigrationController {
             // Uses database unique constraint to atomically create job
             // If job already exists, DataIntegrityViolationException is thrown
             try {
-                atomicJobCreation(jobId);
+                atomicJobCreation(jobId, presentAllowedSheets);
                 log.info("✅ Job {} created atomically", jobId);
             } catch (DataIntegrityViolationException e) {
                 // Another concurrent request already created this job
@@ -979,17 +981,10 @@ public class MultiSheetMigrationController {
      * @throws DataIntegrityViolationException if duplicate job-sheet combination
      */
     @Transactional(isolation = Isolation.SERIALIZABLE)
-    protected void atomicJobCreation(String jobId) {
-        // This method is intentionally empty placeholder
-        // Actual job creation happens in MultiSheetProcessor.initializeSheetTracking()
-        // called from processAllSheetsFromMemory()
-
-        // The SERIALIZABLE transaction ensures that:
-        // 1. No concurrent transaction can insert same job_id + sheet_name
-        // 2. Database unique constraint will throw exception on duplicate
-        // 3. Transaction is atomic - all sheets created or none
-
-        log.debug("🔒 Atomic job creation initiated for: {}", jobId);
+    protected void atomicJobCreation(String jobId, List<String> presentAllowedSheets) {
+        // Within SERIALIZABLE tx, pre-create tracking rows for detected sheets
+        log.debug("🔒 Atomic job creation initiated for: {} with sheets: {}", jobId, presentAllowedSheets);
+        multiSheetProcessor.initializeSheetTrackingForSheetNames(jobId, presentAllowedSheets);
     }
 
     /**

@@ -26,96 +26,96 @@ public class SheetColumnMapper {
     static {
         // HSBG_theo_hop_dong mapping
         Map<String, String> hopDongMap = new HashMap<>();
-        hopDongMap.put("Kho VPBank", "kho_vpbank_norm");
-        hopDongMap.put("Mã đơn vị", "ma_don_vi_norm");
-        hopDongMap.put("Trách nhiệm bàn giao", "trach_nhiem_ban_giao");
-        hopDongMap.put("Số hợp đồng", "so_hop_dong_norm");
-        hopDongMap.put("Tên tập", "ten_tap");
-        hopDongMap.put("Số lượng tập", "so_luong_tap_norm");
-        hopDongMap.put("Số CIF/ CCCD/ CMT khách hàng", "so_cif_norm");
-        hopDongMap.put("Tên khách hàng", "ten_khach_hang");
-        hopDongMap.put("Phân khúc khách hàng", "phan_khuc_khach_hang");
-        hopDongMap.put("Ngày phải bàn giao", "ngay_phai_ban_giao_norm");
-        hopDongMap.put("Ngày bàn giao", "ngay_ban_giao_norm");
-        hopDongMap.put("Ngày giải ngân", "ngay_giai_ngan_norm");
-        hopDongMap.put("Ngày đến hạn", "ngay_den_han_norm");
-        hopDongMap.put("Loại hồ sơ", "loai_ho_so_norm");
-        hopDongMap.put("Luồng hồ sơ", "luong_ho_so");
-        hopDongMap.put("Phân hạn cấp TD", "phan_han_cap_td_norm");
-        hopDongMap.put("Ngày dự kiến tiêu hủy", "ngay_du_kien_tieu_huy_norm");
-        hopDongMap.put("Sản phẩm", "san_pham");
-        hopDongMap.put("Trạng thái case PDM", "trang_thai_case_pdm");
-        hopDongMap.put("Ghi chú", "ghi_chu_case_pdm");
-        hopDongMap.put("Mã thùng", "ma_thung_norm");
-        hopDongMap.put("Ngày nhập kho VPBank", "ngay_nhap_kho_vpbank_norm");
-        hopDongMap.put("Ngày chuyển kho Crown", "ngay_chuyen_kho_crown_norm");
-        hopDongMap.put("Khu vực", "khu_vuc_norm");
-        hopDongMap.put("Hàng", "hang_norm");
-        hopDongMap.put("Cột", "cot_norm");
-        hopDongMap.put("Tình trạng thùng", "tinh_trang_thung");
-        hopDongMap.put("Trạng thái thùng", "trang_thai_thung");
-        hopDongMap.put("Thời hạn cấp TD", "thoi_han_cap_td_norm");
-        hopDongMap.put("Mã DAO", "ma_dao");
-        hopDongMap.put("Mã TS", "ma_ts");
+        hopDongMap.put("Kho VPBank", "vpbank_warehouse");
+        hopDongMap.put("Mã đơn vị", "unit_code");
+        hopDongMap.put("Trách nhiệm bàn giao", "handover_responsibility");
+        hopDongMap.put("Số hợp đồng", "contract_number");
+        hopDongMap.put("Tên tập", "folder_name");
+        hopDongMap.put("Số lượng tập", "folder_quantity");
+        hopDongMap.put("Số CIF/ CCCD/ CMT khách hàng", "customer_cif");
+        hopDongMap.put("Tên khách hàng", "customer_name");
+        hopDongMap.put("Phân khúc khách hàng", "customer_segment");
+        hopDongMap.put("Ngày phải bàn giao", "required_handover_date");
+        hopDongMap.put("Ngày bàn giao", "actual_handover_date");
+        hopDongMap.put("Ngày giải ngân", "disbursement_date");
+        hopDongMap.put("Ngày đến hạn", "due_date");
+        hopDongMap.put("Loại hồ sơ", "document_type");
+        hopDongMap.put("Luồng hồ sơ", "document_flow");
+        hopDongMap.put("Phân hạn cấp TD", "retention_period_category");
+        hopDongMap.put("Ngày dự kiến tiêu hủy", "expected_destruction_date");
+        hopDongMap.put("Sản phẩm", "product");
+        hopDongMap.put("Trạng thái case PDM", "pdm_case_status");
+        hopDongMap.put("Ghi chú", "notes");
+        hopDongMap.put("Mã thùng", "box_code");
+        hopDongMap.put("Ngày nhập kho VPBank", "vpbank_warehouse_entry_date");
+        hopDongMap.put("Ngày chuyển kho Crown", "crown_warehouse_transfer_date");
+        hopDongMap.put("Khu vực", "zone");
+        hopDongMap.put("Hàng", "row");
+        hopDongMap.put("Cột", "column");
+        hopDongMap.put("Tình trạng thùng", "box_condition");
+        hopDongMap.put("Trạng thái thùng", "box_status");
+        hopDongMap.put("Thời hạn cấp TD", "retention_period_years");
+        hopDongMap.put("Mã DAO", "dao_code");
+        hopDongMap.put("Mã TS", "asset_code");
         hopDongMap.put("RRT.ID", "rrt_id");
-        hopDongMap.put("Mã NQ", "ma_nq");
+        hopDongMap.put("Mã NQ", "resolution_code");
         HEADER_TO_COLUMN_MAP.put("HSBG_theo_hop_dong", hopDongMap);
 
         // HSBG_theo_CIF mapping
         Map<String, String> cifMap = new HashMap<>();
-        cifMap.put("Kho VPBank", "kho_vpbank_norm");
-        cifMap.put("Mã đơn vị", "ma_don_vi_norm");
-        cifMap.put("Trách nhiệm bàn giao", "trach_nhiem_ban_giao");
-        cifMap.put("Số CIF khách hàng", "so_cif_norm");
-        cifMap.put("Tên khách hàng", "ten_khach_hang");
-        cifMap.put("Tên tập", "ten_tap");
-        cifMap.put("Số lượng tập", "so_luong_tap_norm");
-        cifMap.put("Phân khúc khách hàng", "phan_khuc_khach_hang");
-        cifMap.put("Ngày phải bàn giao", "ngay_phai_ban_giao_norm");
-        cifMap.put("Ngày bàn giao", "ngay_ban_giao_norm");
-        cifMap.put("Ngày giải ngân", "ngay_giai_ngan_norm");
-        cifMap.put("Loại hồ sơ", "loai_ho_so_norm");
-        cifMap.put("Luồng hồ sơ", "luong_ho_so_norm");
-        cifMap.put("Phân hạn cấp TD", "phan_han_cap_td_norm");
-        cifMap.put("Sản phẩm", "san_pham");
-        cifMap.put("Trạng thái case PDM", "trang_thai_case_pdm");
-        cifMap.put("Ghi chú", "ghi_chu_case_pdm");
-        cifMap.put("Mã NQ", "ma_nq");
-        cifMap.put("Mã thùng", "ma_thung_norm");
-        cifMap.put("Ngày nhập kho VPBank", "ngay_nhap_kho_vpbank_norm");
-        cifMap.put("Ngày chuyển kho Crown", "ngay_chuyen_kho_crown_norm");
-        cifMap.put("Khu vực", "khu_vuc_norm");
-        cifMap.put("Hàng", "hang_norm");
-        cifMap.put("Cột", "cot_norm");
-        cifMap.put("Tình trạng thùng", "tinh_trang_thung");
-        cifMap.put("Trạng thái thùng", "trang_thai_thung");
+        cifMap.put("Kho VPBank", "vpbank_warehouse");
+        cifMap.put("Mã đơn vị", "unit_code");
+        cifMap.put("Trách nhiệm bàn giao", "handover_responsibility");
+        cifMap.put("Số CIF khách hàng", "customer_cif");
+        cifMap.put("Tên khách hàng", "customer_name");
+        cifMap.put("Tên tập", "folder_name");
+        cifMap.put("Số lượng tập", "folder_quantity");
+        cifMap.put("Phân khúc khách hàng", "customer_segment");
+        cifMap.put("Ngày phải bàn giao", "required_handover_date");
+        cifMap.put("Ngày bàn giao", "actual_handover_date");
+        cifMap.put("Ngày giải ngân", "disbursement_date");
+        cifMap.put("Loại hồ sơ", "document_type");
+        cifMap.put("Luồng hồ sơ", "document_flow");
+        cifMap.put("Phân hạn cấp TD", "retention_period_category");
+        cifMap.put("Sản phẩm", "product");
+        cifMap.put("Trạng thái case PDM", "pdm_case_status");
+        cifMap.put("Ghi chú", "notes");
+        cifMap.put("Mã NQ", "resolution_code");
+        cifMap.put("Mã thùng", "box_code");
+        cifMap.put("Ngày nhập kho VPBank", "vpbank_warehouse_entry_date");
+        cifMap.put("Ngày chuyển kho Crown", "crown_warehouse_transfer_date");
+        cifMap.put("Khu vực", "zone");
+        cifMap.put("Hàng", "row");
+        cifMap.put("Cột", "column");
+        cifMap.put("Tình trạng thùng", "box_condition");
+        cifMap.put("Trạng thái thùng", "box_status");
         HEADER_TO_COLUMN_MAP.put("HSBG_theo_CIF", cifMap);
 
         // HSBG_theo_tap mapping
         Map<String, String> tapMap = new HashMap<>();
-        tapMap.put("Kho VPBank", "kho_vpbank_norm");
-        tapMap.put("Mã đơn vị", "ma_don_vi_norm");
-        tapMap.put("Trách nhiệm bàn giao", "trach_nhiem_ban_giao_norm");
-        tapMap.put("Tháng phát sinh", "thang_phat_sinh_norm");
-        tapMap.put("Tên tập", "ten_tap");
-        tapMap.put("Số lượng tập", "so_luong_tap_norm");
-        tapMap.put("Ngày phải bàn giao", "ngay_phai_ban_giao_norm");
-        tapMap.put("Ngày bàn giao", "ngay_ban_giao_norm");
-        tapMap.put("Loại hồ sơ", "loai_ho_so_norm");
-        tapMap.put("Luồng hồ sơ", "luong_ho_so_norm");
-        tapMap.put("Phân hạn cấp TD", "phan_han_cap_td_norm");
-        tapMap.put("Ngày dự kiến tiêu hủy", "ngay_du_kien_tieu_huy_norm");
-        tapMap.put("Sản phẩm", "san_pham_norm");
-        tapMap.put("Trạng thái case PDM", "trang_thai_case_pdm");
-        tapMap.put("Ghi chú", "ghi_chu_case_pdm");
-        tapMap.put("Mã thùng", "ma_thung_norm");
-        tapMap.put("Ngày nhập kho VPBank", "ngay_nhap_kho_vpbank_norm");
-        tapMap.put("Ngày chuyển kho Crown", "ngay_chuyen_kho_crown_norm");
-        tapMap.put("Khu vực", "khu_vuc_norm");
-        tapMap.put("Hàng", "hang_norm");
-        tapMap.put("Cột", "cot_norm");
-        tapMap.put("Tình trạng thùng", "tinh_trang_thung");
-        tapMap.put("Trạng thái thùng", "trang_thai_thung");
+        tapMap.put("Kho VPBank", "vpbank_warehouse");
+        tapMap.put("Mã đơn vị", "unit_code");
+        tapMap.put("Trách nhiệm bàn giao", "handover_responsibility");
+        tapMap.put("Tháng phát sinh", "incident_month");
+        tapMap.put("Tên tập", "folder_name");
+        tapMap.put("Số lượng tập", "folder_quantity");
+        tapMap.put("Ngày phải bàn giao", "required_handover_date");
+        tapMap.put("Ngày bàn giao", "actual_handover_date");
+        tapMap.put("Loại hồ sơ", "document_type");
+        tapMap.put("Luồng hồ sơ", "document_flow");
+        tapMap.put("Phân hạn cấp TD", "retention_period_category");
+        tapMap.put("Ngày dự kiến tiêu hủy", "expected_destruction_date");
+        tapMap.put("Sản phẩm", "product");
+        tapMap.put("Trạng thái case PDM", "pdm_case_status");
+        tapMap.put("Ghi chú", "notes");
+        tapMap.put("Mã thùng", "box_code");
+        tapMap.put("Ngày nhập kho VPBank", "vpbank_warehouse_entry_date");
+        tapMap.put("Ngày chuyển kho Crown", "crown_warehouse_transfer_date");
+        tapMap.put("Khu vực", "zone");
+        tapMap.put("Hàng", "row");
+        tapMap.put("Cột", "column");
+        tapMap.put("Tình trạng thùng", "box_condition");
+        tapMap.put("Trạng thái thùng", "box_status");
         HEADER_TO_COLUMN_MAP.put("HSBG_theo_tap", tapMap);
     }
 
@@ -162,12 +162,17 @@ public class SheetColumnMapper {
         }
 
         // Normalize dates
-        if (dbColumn.contains("ngay") || dbColumn.contains("thang")) {
+        // Support both legacy (Vietnamese) and new English column names
+        if (dbColumn.contains("ngay") || dbColumn.contains("thang")
+                || dbColumn.endsWith("_date") || dbColumn.equals("incident_month")
+                || dbColumn.contains("_entry_date") || dbColumn.contains("_transfer_date")) {
             return normalizeDate(value);
         }
 
         // Normalize numbers (remove commas, spaces)
-        if (dbColumn.contains("so_luong") || dbColumn.contains("thoi_han")) {
+        if (dbColumn.contains("so_luong") || dbColumn.contains("thoi_han")
+                || dbColumn.equals("folder_quantity") || dbColumn.equals("retention_period_years")
+                || dbColumn.equals("row") || dbColumn.equals("column")) {
             return normalizeNumber(value);
         }
 

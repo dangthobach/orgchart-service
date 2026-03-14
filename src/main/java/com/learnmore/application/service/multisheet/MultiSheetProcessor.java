@@ -481,6 +481,29 @@ public class MultiSheetProcessor {
     }
 
     /**
+     * Initialize tracking records filtered by provided sheet names.
+     * Used by controller's atomic job creation to pre-create rows only for present sheets.
+     */
+    public void initializeSheetTrackingForSheetNames(String jobId, List<String> sheetNames) {
+        if (sheetNames == null || sheetNames.isEmpty()) {
+            log.warn("No sheet names provided for initialization. Skipping jobId={}", jobId);
+            return;
+        }
+
+        List<SheetMigrationConfig.SheetConfig> enabledSheets = config.getEnabledSheetsOrdered();
+        List<SheetMigrationConfig.SheetConfig> sheetsToInit = enabledSheets.stream()
+                .filter(sc -> sheetNames.contains(sc.getName()))
+                .toList();
+
+        if (sheetsToInit.isEmpty()) {
+            log.warn("No enabled sheets matched provided names {} for jobId={}", sheetNames, jobId);
+            return;
+        }
+
+        initializeSheetTracking(jobId, sheetsToInit);
+    }
+
+    /**
      * Update sheet status
      * Thread-safe with optimistic locking retry mechanism
      */
